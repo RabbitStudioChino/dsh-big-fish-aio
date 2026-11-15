@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "v1.0.1",
+  "version": "1.0.1",
+  "channel": "stable",
+  "title": "大肥鱼 1.0.1",
+  "publishedAt": "2026-11-15T15:33:54.082Z",
+  "summary": "修复 GitHub 更新检查，并恢复总览“鱼的胃袋”文案。",
+  "sections": [
+    {
+      "id": "updates",
+      "title": "更新检查",
+      "items": [
+        {
+          "id": "updates.github_ref",
+          "title": "使用轻量 main 引用检查 GitHub 更新",
+          "description": "直接读取分支引用中的完整提交 SHA，避免首次正式根提交的完整差异超过 JSON 响应大小限制；保留 512 KiB 限制、Git 回退及固定提交包信息校验。"
+        }
+      ]
+    },
+    {
+      "id": "workbench",
+      "title": "总览文案",
+      "items": [
+        {
+          "id": "workbench.hero_copy",
+          "title": "恢复“把日常，收进鱼的胃袋里。”",
+          "description": "总览标题与说明恢复为鱼的胃袋风格文案，保留现有布局、主题和交互。"
+        }
+      ]
+    }
+  ]
+}

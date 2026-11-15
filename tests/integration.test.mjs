@@ -112,7 +112,7 @@ test('统一更新拒绝错误包、无效版本、未鉴权和跨站请求；�
     writeFileSync(join(root, 'package.json'), read('../package.json'))
     const updater = createSelfUpdate({ packageRoot: root })
     let remote = { name: 'wrong-plugin', version: '99.0.0' }
-    globalThis.fetch = async url => ({ ok: true, json: async () => String(url).includes('api.github.com') ? { sha: 'b'.repeat(40) } : remote })
+    globalThis.fetch = async url => ({ ok: true, json: async () => String(url).includes('api.github.com') ? { object: { sha: 'b'.repeat(40) } } : remote })
     assert.match((await updater.check(true, 'github')).error, /包名/)
     remote = { name: 'dsh-big-fish-aio', version: 'not-semver' }
     assert.match((await updater.check(true, 'github')).error, /SemVer/)

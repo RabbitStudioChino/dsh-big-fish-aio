@@ -7632,7 +7632,7 @@ moduleLoader.load({
   },
 })
 
-const META = {"name":"dsh-big-fish-aio","version":"1.0.0","upstreamCompatibility":[{"name":"通到 QQ","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-qq-link","version":"1.5.1","commit":"fba7e3ee8ffb3a8f819a7823eb05186cfb782ecb","modulePath":"modules/qq"},{"name":"鱼的记忆","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-fish-memory","version":"1.5.2","commit":"5124cc1fa5a3149e8a68cf1d858e24b5bf2a2eea","modulePath":"modules/memory"},{"name":"鱼的心情","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-feiyu-mood","version":"0.9.0","commit":"02fddcaae0763651ecd65af5f644fe61f19de4bd","modulePath":"modules/mood"},{"name":"主动搭话","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-speak-up","version":"0.3.0","commit":"e3bc6362208c693bb833ecf463ec6a20df4b6419","modulePath":"modules/speak"}]};
+const META = {"name":"dsh-big-fish-aio","version":"1.0.1","upstreamCompatibility":[{"name":"通到 QQ","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-qq-link","version":"1.5.1","commit":"fba7e3ee8ffb3a8f819a7823eb05186cfb782ecb","modulePath":"modules/qq"},{"name":"鱼的记忆","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-fish-memory","version":"1.5.2","commit":"5124cc1fa5a3149e8a68cf1d858e24b5bf2a2eea","modulePath":"modules/memory"},{"name":"鱼的心情","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-feiyu-mood","version":"0.9.0","commit":"02fddcaae0763651ecd65af5f644fe61f19de4bd","modulePath":"modules/mood"},{"name":"主动搭话","author":"Yuuyuko-uu","url":"https://github.com/Yuuyuko-uu/dsh-speak-up","version":"0.3.0","commit":"e3bc6362208c693bb833ecf463ec6a20df4b6419","modulePath":"modules/speak"}]};
 const FISH_LOG = { pending: null, focus: null, listeners: new Set() }
 function fishOpenUpdateLog(target) {
   if (!target?.ok) return
@@ -9275,8 +9275,8 @@ function Overview({ navigate, notify }) {
     h('section', { className: 'fish-hero' },
       h('div', { className: 'fish-hero-copy' },
         h('span', { className: 'fish-kicker fish-kicker-light' }, h('span', { className: 'fish-kicker-dot' }), 'BIG FISH · QQ陪伴手帐'),
-        h('h1', null, 'QQ 互通与', h('span', { className: 'fish-mark' }, '长期记忆'), '管理。'),
-        h('p', { className: 'fish-hero-lead' }, '统一管理 QQ 消息、长期记忆、心情与主动消息。'),
+        h('h1', null, '把日常，收进', h('span', { className: 'fish-mark' }, '鱼的胃袋'), '里。'),
+        h('p', { className: 'fish-hero-lead' }, 'QQ 的消息、一起记住的事、今天的心情，还有一句恰到好处的问候——都替你收好，慢慢翻。'),
         h('p', { className: 'fish-hero-quote' }, '“' + 每天一句({ memory, mood }) + '”')),
       h('figure', { className: 'fish-welcome', 'aria-hidden': true },
         h('span', { className: 'fish-tape fish-welcome-tape' }),

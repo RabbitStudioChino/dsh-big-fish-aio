@@ -95,7 +95,7 @@ test('版本直接查 GitHub，日志始终读安装包；断网与目标变化�
   let remoteVersion = '1.1.0', commit = sha, installs = 0
   t.mock.method(globalThis, 'fetch', async url => {
     assert.ok(!String(url).includes('rabbitstudio.club'))
-    return Response.json(String(url).includes('api.github.com') ? { sha: commit } : { name: 'dsh-big-fish-aio', version: remoteVersion })
+    return Response.json(String(url).includes('api.github.com') ? { object: { sha: commit } } : { name: 'dsh-big-fish-aio', version: remoteVersion })
   })
   const before = await updater.check(true, 'github')
   assert.equal(before.latest, '1.1.0')
@@ -116,7 +116,7 @@ test('版本直接查 GitHub，日志始终读安装包；断网与目标变化�
 })
 test('成功后持久记录、重载后提醒、关闭后去重；失败与旧实例不弹日志', async t => {
   const { updater, root, metadata, bundle } = fixture(t)
-  t.mock.method(globalThis, 'fetch', async url => Response.json(String(url).includes('api.github.com') ? { sha } : { name: 'dsh-big-fish-aio', version: '1.1.0' }))
+  t.mock.method(globalThis, 'fetch', async url => Response.json(String(url).includes('api.github.com') ? { object: { sha } } : { name: 'dsh-big-fish-aio', version: '1.1.0' }))
   const ctx = { pluginManager: { installBundle: async () => ({ applied: false }) } }
   assert.equal((await updater.install(ctx, 'github', { confirmSourceChange: true })).ok, false)
   assert.equal((await createSelfUpdate({ packageRoot: root }).version()).postUpdate, null)

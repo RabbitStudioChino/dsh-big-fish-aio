@@ -34,14 +34,14 @@ test('仅检查 大肥鱼 main，支持缓存和刷新；安装不沿用旧仓�
     const urls = []
     globalThis.fetch = async url => {
       urls.push(url)
-      return { ok: true, json: async () => String(url).includes('api.github.com') ? { sha: 'a'.repeat(40) } : { name: 'dsh-big-fish-aio', version: '1.5.1-10' } }
+      return { ok: true, json: async () => String(url).includes('api.github.com') ? { object: { sha: 'a'.repeat(40) } } : { name: 'dsh-big-fish-aio', version: '1.5.1-10' } }
     }
     const updater = createSelfUpdate({ packageRoot: root })
     const result = await updater.check(true, 'github')
     assert.equal(result.hasUpdate, true)
     assert.equal(result.repoUrl, 'https://github.com/RabbitStudioChino/dsh-big-fish-aio')
     assert.equal(result.from, 'GitHub')
-    assert.deepEqual(urls.map(url => String(url).replace(/\?t=\d+$/, '')), ['https://api.github.com/repos/RabbitStudioChino/dsh-big-fish-aio/commits/main', 'https://raw.githubusercontent.com/RabbitStudioChino/dsh-big-fish-aio/' + 'a'.repeat(40) + '/package.json'])
+    assert.deepEqual(urls.map(url => String(url).replace(/\?t=\d+$/, '')), ['https://api.github.com/repos/RabbitStudioChino/dsh-big-fish-aio/git/ref/heads/main', 'https://raw.githubusercontent.com/RabbitStudioChino/dsh-big-fish-aio/' + 'a'.repeat(40) + '/package.json'])
     assert.equal((await updater.check(false, 'github')).cached, true)
     assert.equal(urls.length, 2)
     await updater.check(true, 'github')

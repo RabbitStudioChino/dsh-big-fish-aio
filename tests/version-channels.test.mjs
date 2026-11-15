@@ -13,7 +13,7 @@ test('正式 GitHub 与 npm 共用正式版本，忽略内测开发编号', asyn
   let internal = '0.1.1', external = '0.0.1'
   try {
     writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'dsh-big-fish-aio', version: '0.0.1', repositoryVersion: '0.1.1', repository: 'https://github.com/RabbitStudioChino/dsh-big-fish-aio' }))
-    globalThis.fetch = async url => Response.json(String(url).includes('api.github.com') ? { sha: 'd'.repeat(40) } : { name: 'dsh-big-fish-aio', version: external, repositoryVersion: internal, dist: { integrity: 'sha512-' + 'a'.repeat(86) + '==' } })
+    globalThis.fetch = async url => Response.json(String(url).includes('api.github.com') ? { object: { sha: 'd'.repeat(40) } } : { name: 'dsh-big-fish-aio', version: external, repositoryVersion: internal, dist: { integrity: 'sha512-' + 'a'.repeat(86) + '==' } })
     const updater = createSelfUpdate({ packageRoot: root })
     assert.equal((await updater.check(true, 'github')).hasUpdate, false)
     assert.equal((await updater.check(true, 'mirror')).hasUpdate, false)

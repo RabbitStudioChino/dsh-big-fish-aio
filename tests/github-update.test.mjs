@@ -33,7 +33,7 @@ function 建安装副本(home, commit) {
 
 const 装提交 = (sha, remote = META) => async url => {
   const text = String(url)
-  if (text.includes('/commits/main')) return Response.json({ sha })
+  if (text.includes('/git/ref/heads/main')) return Response.json({ ref: 'refs/heads/main', object: { type: 'commit', sha } })
   return Response.json({ ...remote, version: remote.repositoryVersion || remote.version })
 }
 
@@ -48,7 +48,7 @@ test('正式版本更新时安装到核验后的 main 提交', async () => {
     const updater = createSelfUpdate({ packageRoot: root })
     assert.equal((await updater.version()).installedCommit, OLD)
     const result = await updater.check(true, 'github')
-    assert.match(requests[0], /api\.github\.com\/repos\/RabbitStudioChino\/dsh-big-fish-aio\/commits\/main\?t=\d+/)
+    assert.match(requests[0], /api\.github\.com\/repos\/RabbitStudioChino\/dsh-big-fish-aio\/git\/ref\/heads\/main\?t=\d+/)
     assert.equal(result.ok, true)
     assert.equal(result.current, META.version)
     assert.equal(result.latest, '0.1.5')
@@ -65,6 +65,24 @@ test('正式版本更新时安装到核验后的 main 提交', async () => {
     assert.equal((await updater.version()).installedCommit, NEW)
     assert.deepEqual(installed, ['github:RabbitStudioChino/dsh-big-fish-aio#' + NEW])
   } finally { globalThis.fetch = original; rmSync(home, { recursive: true, force: true }) }
+})
+
+test('首发提交的完整 diff 超过 512 KiB 时只查询 main 引用，无需 Git 回退', async t => {
+  const home = mkdtempSync(join(tmpdir(), 'fish-ref-size-'))
+  t.after(() => rmSync(home, { recursive: true, force: true }))
+  const root = 建安装副本(home, OLD)
+  const requests = []
+  t.mock.method(childProcess, 'execFile', () => { assert.fail('引用查询成功时不得回退 Git') })
+  t.mock.method(globalThis, 'fetch', async url => {
+    requests.push(String(url))
+    if (String(url).includes('/commits/main')) return Response.json({ sha: NEW, files: ['x'.repeat(512 * 1024)] })
+    return 装提交(NEW)(url)
+  })
+  const result = await createSelfUpdate({ packageRoot: root }).check(true, 'github')
+  assert.equal(result.ok, true)
+  assert.equal(result.latestCommit, NEW)
+  assert.match(requests[0], /\/git\/ref\/heads\/main\?t=\d+$/)
+  assert.equal(requests.length, 2)
 })
 
 test('宿主拒绝直接读取 ctx.pluginManager 时改走 ctx.get 仍能安装', async () => {
@@ -128,7 +146,7 @@ test('raw.githubusercontent 不可用时回退 jsDelivr 读取同一提交的版
     globalThis.fetch = async url => {
       const text = String(url)
       requests.push(text)
-      if (text.includes('/commits/main')) return Response.json({ sha: NEW })
+      if (text.includes('/git/ref/heads/main')) return Response.json({ ref: 'refs/heads/main', object: { type: 'commit', sha: NEW } })
       if (text.includes('raw.githubusercontent.com')) throw new Error('连接被重置')
       return Response.json({ ...META, version: META.repositoryVersion })
     }
@@ -150,7 +168,7 @@ test('raw 与 jsDelivr 都不可用时用 GitHub contents 接口读 package.json
     globalThis.fetch = async url => {
       const text = String(url)
       requests.push(text)
-      if (text.includes('/commits/main')) return Response.json({ sha: NEW })
+      if (text.includes('/git/ref/heads/main')) return Response.json({ ref: 'refs/heads/main', object: { type: 'commit', sha: NEW } })
       if (text.includes('/contents/package.json')) {
         return Response.json({ encoding: 'base64', content: Buffer.from(JSON.stringify({ ...META, version: META.repositoryVersion })).toString('base64') })
       }
