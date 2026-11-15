@@ -1,0 +1,229 @@
+{
+  "name": "dsh-big-fish-aio",
+  "version": "1.0.0",
+  "description": "大肥鱼：统一管理 QQ 互通、历史导入、长期记忆、鱼的心情、主动搭话与插件更新。",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Yuuyuko-uu (https://github.com/Yuuyuko-uu)",
+  "contributors": [
+    "RabbitStudio (功能扩展与界面整合)"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./icon": "./assets/logo.png",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "LICENSE",
+    "LICENSE.md",
+    "NOTICE",
+    "README.md",
+    "assets/bigfish/sticker-book.png",
+    "assets/bigfish/sticker-chat.png",
+    "assets/bigfish/sticker-gift.png",
+    "assets/bigfish/sticker-heart.png",
+    "assets/bigfish/sticker-read.png",
+    "assets/bigfish/sticker-update-failure.png",
+    "assets/bigfish/sticker-update-success.png",
+    "assets/bigfish/sticker-update.png",
+    "assets/bigfish/sticker-wave.png",
+    "assets/bigfish/sticker-welcome.png",
+    "assets/logo.png",
+    "assets/mood/body/feiyu-good.png",
+    "assets/mood/body/feiyu-great.png",
+    "assets/mood/body/feiyu-sad.png",
+    "assets/mood/body/feiyu-worry.png",
+    "assets/mood/body/feiyu.png",
+    "assets/mood/face/face-good.png",
+    "assets/mood/face/face-great.png",
+    "assets/mood/face/face-ok.png",
+    "assets/mood/face/face-sad.png",
+    "assets/mood/face/face-worry.png",
+    "assets/themes/dark.css",
+    "assets/themes/light.css",
+    "client.js",
+    "cordis.patch.yml",
+    "docs/open-platform-plugin-prompt.md",
+    "docs/update-service.md",
+    "index.js",
+    "lib/bigfish-assets.mjs",
+    "lib/bundled-changelog.mjs",
+    "lib/management-auth.mjs",
+    "lib/open-platform-http.mjs",
+    "lib/open-platform-import.mjs",
+    "lib/open-platform-schema.mjs",
+    "lib/open-platform.mjs",
+    "lib/rice-api.mjs",
+    "lib/rice-thresholds.mjs",
+    "lib/selfupdate.mjs",
+    "lib/skill-features.mjs",
+    "lib/theme-palette.mjs",
+    "lib/update-service.mjs",
+    "locale/en.json",
+    "locale/zh.json",
+    "modules/memory/CHANGELOG.md",
+    "modules/memory/cordis.patch.yml",
+    "modules/memory/lib/atomic-file.mjs",
+    "modules/memory/lib/client.js",
+    "modules/memory/lib/embedding-usage.mjs",
+    "modules/memory/lib/hostdeps.mjs",
+    "modules/memory/lib/index.js",
+    "modules/memory/lib/notices/dsh-memory-rag-LICENSE",
+    "modules/memory/lib/notices/dsh-memory-rag-NOTICE",
+    "modules/memory/lib/notices/jieba-LICENSE",
+    "modules/memory/lib/qq-migration.mjs",
+    "modules/memory/lib/qq-scope.mjs",
+    "modules/memory/lib/qwen-embedding.mjs",
+    "modules/memory/lib/semantic-index.mjs",
+    "modules/memory/lib/store-merge.mjs",
+    "modules/memory/lib/生成档案.js",
+    "modules/memory/lib/词典-来源.txt",
+    "modules/memory/lib/词典.txt",
+    "modules/memory/lib/词频.txt",
+    "modules/memory/LICENSE",
+    "modules/memory/package.json",
+    "modules/memory/README.md",
+    "modules/mood/assets/widget.js",
+    "modules/mood/CHANGELOG.md",
+    "modules/mood/client.js",
+    "modules/mood/lib/charm-images.mjs",
+    "modules/mood/lib/index.js",
+    "modules/mood/lib/memory-binding.mjs",
+    "modules/mood/LICENSE",
+    "modules/mood/package.json",
+    "modules/mood/README.md",
+    "modules/qq/CHANGELOG.md",
+    "modules/qq/cordis.patch.yml",
+    "modules/qq/lib/account-operations.mjs",
+    "modules/qq/lib/atomic-file.mjs",
+    "modules/qq/lib/client.js",
+    "modules/qq/lib/docker-onebot.mjs",
+    "modules/qq/lib/group-history.mjs",
+    "modules/qq/lib/history-import.mjs",
+    "modules/qq/lib/history-file.mjs",
+    "modules/qq/lib/host.js",
+    "modules/qq/lib/inbound-files.mjs",
+    "modules/qq/lib/media-storage.mjs",
+    "modules/qq/lib/memory-sources.mjs",
+    "modules/qq/lib/onebot-file-events.mjs",
+    "modules/qq/lib/onebot-file-stream.mjs",
+    "modules/qq/lib/response-guard.mjs",
+    "modules/qq/lib/session-tools.mjs",
+    "modules/qq/lib/sticker-tag-prompt.mjs",
+    "modules/qq/lib/stickers.mjs",
+    "modules/qq/lib/workspace.mjs",
+    "modules/qq/LICENSE",
+    "modules/qq/package.json",
+    "modules/qq/README.md",
+    "modules/qq/tools/asr_cli.py",
+    "modules/qq/tools/语音/README.md",
+    "modules/qq/tools/语音/启动-录语音.bat",
+    "modules/qq/tools/语音/录语音.mjs",
+    "modules/qq/tools/语音/录音回环.ps1",
+    "modules/qq/tools/语音/朗读信号哨兵/background.js",
+    "modules/qq/tools/语音/朗读信号哨兵/content.js",
+    "modules/qq/tools/语音/朗读信号哨兵/manifest.json",
+    "modules/speak/CHANGELOG.md",
+    "modules/speak/lib/client.js",
+    "modules/speak/lib/host.js",
+    "modules/speak/LICENSE",
+    "modules/speak/package.json",
+    "modules/speak/README.md",
+    "update/changelog-v*.json"
+  ],
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "test": "node --test tests/*.test.mjs && npm --prefix modules/qq test && npm --prefix modules/memory test && npm --prefix modules/mood test && npm --prefix modules/speak test",
+    "prepack": "node scripts/release-policy.mjs && npm run build",
+    "lint": "npm run build && eslint . --max-warnings 0",
+    "check:public": "node scripts/check-public-files.mjs",
+    "check": "npm run lint && npm test && npm run check:public",
+    "release": "node scripts/release.mjs",
+    "release:check": "node scripts/release.mjs check",
+    "scan:secrets": "gitleaks git --redact=100 --log-opts=--all"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RabbitStudioChino/dsh-big-fish-aio.git"
+  },
+  "homepage": "https://github.com/RabbitStudioChino/dsh-big-fish-aio#readme",
+  "bugs": {
+    "url": "https://github.com/RabbitStudioChino/dsh-big-fish-aio/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "qq",
+    "memory"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ],
+      "external": [
+        "react",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    }
+  },
+  "upstreamCompatibility": [
+    {
+      "name": "通到 QQ",
+      "author": "Yuuyuko-uu",
+      "url": "https://github.com/Yuuyuko-uu/dsh-qq-link",
+      "version": "1.5.1",
+      "commit": "fba7e3ee8ffb3a8f819a7823eb05186cfb782ecb",
+      "modulePath": "modules/qq"
+    },
+    {
+      "name": "鱼的记忆",
+      "author": "Yuuyuko-uu",
+      "url": "https://github.com/Yuuyuko-uu/dsh-fish-memory",
+      "version": "1.5.2",
+      "commit": "5124cc1fa5a3149e8a68cf1d858e24b5bf2a2eea",
+      "modulePath": "modules/memory"
+    },
+    {
+      "name": "鱼的心情",
+      "author": "Yuuyuko-uu",
+      "url": "https://github.com/Yuuyuko-uu/dsh-feiyu-mood",
+      "version": "0.9.0",
+      "commit": "02fddcaae0763651ecd65af5f644fe61f19de4bd",
+      "modulePath": "modules/mood"
+    },
+    {
+      "name": "主动搭话",
+      "author": "Yuuyuko-uu",
+      "url": "https://github.com/Yuuyuko-uu/dsh-speak-up",
+      "version": "0.3.0",
+      "commit": "e3bc6362208c693bb833ecf463ec6a20df4b6419",
+      "modulePath": "modules/speak"
+    }
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "globals": "17.14.0"
+  },
+  "dependencies": {
+    "stream-json": "3.9.0"
+  }
+}

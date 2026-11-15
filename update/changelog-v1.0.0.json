@@ -1,0 +1,851 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "v1.0.0",
+  "version": "1.0.0",
+  "channel": "stable",
+  "title": "大肥鱼 1.0.0",
+  "publishedAt": "2026-11-15T14:18:24.192Z",
+  "summary": "大肥鱼 v1.0.0 首次正式发布功能基线：统一 QQ 互通、长期记忆、心情挂饰、主动搭话、开放平台、文件管理、用量统计与更新系统。",
+  "sections": [
+    {
+      "id": "workbench",
+      "title": "工作台与交互",
+      "items": [
+        {
+          "id": "workbench.navigation",
+          "module": "工作台",
+          "title": "十个统一入口与模块子页",
+          "description": "总览、QQ 互通、长期记忆、鱼的心情、主动搭话、开放平台、文件管理、运行日志、吃大米饭、更新与来源统一导航；模块子页保留输入及操作状态。"
+        },
+        {
+          "id": "workbench.overview",
+          "module": "工作台",
+          "title": "状态总览与功能入口",
+          "description": "集中查看连接、记忆、心情与搭话状态，记忆按真实库去重汇总；总览使用大肥鱼插画与对应功能入口。"
+        },
+        {
+          "id": "workbench.theme",
+          "module": "工作台",
+          "title": "明暗主题与共用色库",
+          "description": "跟随 DSH 主题，使用深海手帐、奶油纸面与共用深浅色变量，覆盖表单、表格、模态框、通知、挂饰和用量浮层。"
+        },
+        {
+          "id": "workbench.responsive",
+          "module": "工作台",
+          "title": "窄屏布局与区域滚动",
+          "description": "按实际容器宽度调整导航、双列卡片和表单；侧栏与内容区固定层级，长列表及模态框内容独立滚动。"
+        },
+        {
+          "id": "workbench.settings",
+          "module": "工作台",
+          "title": "即时保存与失败恢复",
+          "description": "开关和选择即时保存，文本与数字失焦保存；事务操作保留确认。异步刷新避免旧响应覆盖新数据，保存失败保留输入或恢复原状态。"
+        },
+        {
+          "id": "workbench.notifications",
+          "module": "工作台",
+          "title": "通知、帮助与无障碍操作",
+          "description": "主题通知在右上角排队叠放，支持倒计时、手动关闭和悬浮暂停；复用说明、确认及编辑模态框，支持键盘、焦点管理和减少动态效果。"
+        },
+        {
+          "id": "workbench.copy",
+          "module": "工作台",
+          "title": "说明宽度与精简文案",
+          "description": "全局说明改为按内容区宽度排版，精简标题、按钮、帮助与状态提示，统一正式表达并适配深浅主题。"
+        },
+        {
+          "id": "workbench.defaults",
+          "module": "工作台",
+          "title": "首次安装默认配置",
+          "description": "首次安装采用预览中的功能开关与通用参数；账号、工作区、绑定和密钥留空，主动消息使用通用文案。已有显式配置保持不变，说明文字同步默认状态。"
+        }
+      ]
+    },
+    {
+      "id": "qq",
+      "title": "QQ 互通与会话策略",
+      "items": [
+        {
+          "id": "qq.bridge",
+          "module": "QQ 互通",
+          "title": "QQ 私聊与群聊双向互通",
+          "description": "通过 OneBot HTTP 对接 NapCat / SnowLuma，QQ 消息进入绑定 DSH 会话，模型回复经原发送链交回对应聊天；总开关与试运行共同控制实际收发。"
+        },
+        {
+          "id": "qq.startup",
+          "module": "QQ 互通",
+          "title": "开启前自检",
+          "description": "检查唯一主人、后端在线、启用映射、独占会话、历史读取、模型和服务商配置，通过后才开启；自检不发送测试消息、不调用模型生成。"
+        },
+        {
+          "id": "qq.workspace",
+          "module": "QQ 互通",
+          "title": "工作区绑定与会话恢复",
+          "description": "选择已登记工作区，自动创建或恢复映射会话并登记归属；按工作区读取目标，失效目录拒绝写入，重启后恢复必要工具和会话绑定。"
+        },
+        {
+          "id": "qq.mapping",
+          "module": "QQ 互通",
+          "title": "私聊和群聊独占映射",
+          "description": "分别添加、修改、启停与删除映射，支持称呼、真实名称和独立会话；重复或歧义绑定拒绝授权，删除需确认。"
+        },
+        {
+          "id": "qq.owner",
+          "module": "QQ 互通",
+          "title": "唯一可信主人",
+          "description": "仅私聊映射可勾选唯一主人，账号、跨群读取和代发统一核验机器人、聊天、消息凭据及当前 Agent；正文或昵称不能提升权限。"
+        },
+        {
+          "id": "qq.merge",
+          "module": "QQ 互通",
+          "title": "连续消息合并",
+          "description": "按等待窗口合并消息，支持最长等待和单批条数上限，配合去重、冷却与频率限制；失败保留未确认消息，取消或关闭后不继续递送。"
+        },
+        {
+          "id": "qq.group_receive",
+          "module": "QQ 互通",
+          "title": "群聊监听与点名接听",
+          "description": "支持群消息监听、仅点名、点名后按条数或时间继续接听、点名必回和回复概率；逐群规则与全局设置共同生效。"
+        },
+        {
+          "id": "qq.gate",
+          "module": "QQ 互通",
+          "title": "回复门槛与逐会话沙箱",
+          "description": "逐映射设置回复门槛和沙箱权限；执行、文件与后台任务工具沿用宿主策略，关闭授权后拒绝排队调用并取消受控执行。"
+        },
+        {
+          "id": "qq.send",
+          "module": "QQ 互通",
+          "title": "唤醒与回复发送策略",
+          "description": "支持仅发标记内内容、仅回 QQ 唤醒、自动触发转发、来源标识、私聊署名、唤醒有效期和全体提醒权限；每段发送前复核开关与绑定。"
+        },
+        {
+          "id": "qq.split",
+          "module": "QQ 互通",
+          "title": "长回复与按句拆分",
+          "description": "可按空行或句子拆分长回复并配置段间间隔，避免单条过长；转发保留当前会话身份与出站权限。"
+        },
+        {
+          "id": "qq.images",
+          "module": "QQ 互通",
+          "title": "图片接收与生成图转发",
+          "description": "将 QQ 图片作为附件交给 DSH，并转发会话生成的图片附件或 Markdown 原图；保留格式、大小与数量校验，拒绝旧管理接口手动发图。"
+        },
+        {
+          "id": "qq.files",
+          "module": "QQ 互通",
+          "title": "QQ 文件收发",
+          "description": "处理历史 file 段、群文件上传和私聊离线文件事件，支持后端直链及分块流；校验数量、实际字节数和完成确认，不执行文件，单个失败不阻断文字。"
+        },
+        {
+          "id": "qq.archive",
+          "module": "QQ 互通",
+          "title": "图片与文件独立存储",
+          "description": "额外归档开关分别控制图片和文件，默认关闭；归档失败不阻断消息接收，附件缓存继续由 DSH 管理。"
+        },
+        {
+          "id": "qq.asr",
+          "module": "QQ 互通",
+          "title": "语音转写",
+          "description": "提供语音识别开关、环境安装、转写命令、模型目录、参数与超时设置；收到语音转文字后进入原会话，依赖配置的转写工具。"
+        },
+        {
+          "id": "qq.notices",
+          "module": "QQ 互通",
+          "title": "通知与事件接收",
+          "description": "接收戳一戳等后端事件，并通过 SSE / WebSocket 或鉴权 HTTP 通知入口补齐事件；文件事件与历史共用去重，迟到事件不被时间水位吞掉。"
+        },
+        {
+          "id": "qq.persona",
+          "module": "QQ 互通",
+          "title": "角色与特殊身份设定",
+          "description": "支持全局角色、逐会话独立角色和独立开关的特殊身份设定；保存后同步当前及恢复后的绑定会话。"
+        },
+        {
+          "id": "qq.replay",
+          "module": "QQ 互通",
+          "title": "离线消息补投",
+          "description": "在配置时间窗口内补投会话关闭期间的消息，配合历史水位和持久去重，避免重启后无条件回扫旧内容。"
+        },
+        {
+          "id": "qq.account",
+          "module": "QQ 互通",
+          "title": "账号资料与申请审批",
+          "description": "可分别授权昵称、签名、头像、好友申请和群邀请操作；仅可信主人可执行，申请持久记录并按编号确认，过期、撤销或结果不确定时拒绝自动重复操作。"
+        },
+        {
+          "id": "qq.space",
+          "module": "QQ 互通",
+          "title": "QQ 空间配置与工具",
+          "description": "支持发布文字与最多九张配图、可见范围、动态和说说详情、评论浏览、定时发布提醒及巡检互动配置。实际可执行动作受工具与后端能力限制，不把评论配置等同于具备发表评论工具。"
+        },
+        {
+          "id": "qq.group_history",
+          "module": "QQ 互通",
+          "title": "主人跨群查原始记录",
+          "description": "主人可信私聊可定位同账号下已启用且来源核验的群，按日期分页读取群历史，必要时回退本地 DSH 会话；结果说明来源、游标和缺口，不宣称 QQ 云端历史完整。"
+        },
+        {
+          "id": "qq.group_send",
+          "module": "QQ 互通",
+          "title": "主人私聊向群代发",
+          "description": "经工具定位唯一授权群后代发纯文字，发送前再次验证主人、当前消息和群绑定；同轮同群同文持久去重，有消息编号才确认成功，超时提示人工核查。"
+        },
+        {
+          "id": "qq.tools",
+          "module": "QQ 互通",
+          "title": "宿主联网与沙箱工具",
+          "description": "绑定会话补齐宿主标准工具、网络及沙箱能力，保留已有工具与审批路径；能力缺失时拒绝补挂，卸载时回收本插件资源。"
+        },
+        {
+          "id": "qq.output_guard",
+          "module": "QQ 互通",
+          "title": "模型输出保护与单次恢复",
+          "description": "拦截连续重复短句、异常超长思考或正文混入转录等结果，保留新消息；在本轮受限恢复一次，保留已成功工具结果，防止递归恢复和重复执行。"
+        },
+        {
+          "id": "qq.file_manager",
+          "module": "QQ 互通",
+          "title": "文件与素材管理入口",
+          "description": "QQ 图片、QQ 文件和表情素材统一在文件管理中查看，读取与转发遵守已登记目录、可信来源和会话权限。"
+        },
+        {
+          "id": "qq.voice_send",
+          "module": "QQ 互通",
+          "title": "语音发送状态入口",
+          "description": "提供独立语音发送页面，当前明确显示服务暂不可用，不宣称已实现语音合成或真实发送。"
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "title": "QQ 聊天记录导入",
+      "items": [
+        {
+          "id": "history.formats",
+          "module": "历史导入",
+          "title": "聊天文件与后端历史",
+          "description": "文件支持 OneBot JSON 与 QQ 官方 TXT，流式上传、分批排序和分段存盘，不设文件大小或消息条数上限；文件越大，整理记忆时通常消耗更多 Token。JSON 无需备份密码或同账号登录，不支持 QCE；.bak 加密备份暂不能直接导入。后端历史按北京时间起止日期筛选，包含结束日。"
+        },
+        {
+          "id": "qq.history",
+          "module": "历史导入",
+          "title": "聊天记录页面",
+          "description": "从 QQ 互通的图片与文件下方进入聊天记录页，分为导入文件、读取后端、恢复任务三个入口，预览核对后建立或继续持久任务；导入属于管理页操作。"
+        },
+        {
+          "id": "history.chunking",
+          "module": "历史导入",
+          "title": "按时间分段与摘要承接",
+          "description": "以分段方式读取超长历史，跨段携带摘要并覆盖完整文本，避免末尾与 Unicode 内容丢失；目标会话需使用支持的模型配置。"
+        },
+        {
+          "id": "history.resume",
+          "module": "历史导入",
+          "title": "暂停、恢复与失败重试",
+          "description": "导入文件和读取后端确认后统一进入导入列表，按创建时间倒序展示记录及完成状态；列表支持暂停、继续分析、失败重试及旧任务恢复，未确认的内容不推进进度。导出说明置于页面底部，不使用卡片。"
+        },
+        {
+          "id": "history.isolation",
+          "module": "历史导入",
+          "title": "固定写入目标与幂等",
+          "description": "通过内置记忆导入接口写入固定原库，不直接改写记忆 JSON；绑定或隔离范围变化时拒绝旧任务继续写入，避免串库与重复导入。"
+        }
+      ]
+    },
+    {
+      "id": "stickers",
+      "title": "共享表情包",
+      "items": [
+        {
+          "id": "stickers.send",
+          "module": "表情包",
+          "title": "按语境自动发表情",
+          "description": "由当前会话模型结合近期消息、助手回复与候选素材选图；无合适素材、模型失败、已有配图或冷却期间不追加，遵守 QQ 和图片发送开关。"
+        },
+        {
+          "id": "stickers.collect",
+          "module": "表情包",
+          "title": "自动收藏收到的表情",
+          "description": "支持实时大表情、表情图片与 GIF，群收藏独立开关；普通图片需额外授权，不回扫历史，正在下载的素材在入库前重查配置。"
+        },
+        {
+          "id": "stickers.classify",
+          "module": "表情包",
+          "title": "标签与分类管理",
+          "description": "支持自动标签、场景识别、十二类分类和人工编辑，保护人工标签；自动标注和分类可独立开启。"
+        },
+        {
+          "id": "stickers.search",
+          "module": "表情包",
+          "title": "跨聊天共享查询",
+          "description": "所有已授权绑定共同查询共享素材库，支持关键词和分页；用户主动请求表情不受自动发送开关与冷却限制。"
+        },
+        {
+          "id": "stickers.import",
+          "module": "表情包",
+          "title": "单张与批量导入",
+          "description": "单张可选择或填写多个标签，批量逐图入库和识别；留空时自动生成标签与名称，单图失败保留原图且不阻断其余素材。"
+        },
+        {
+          "id": "stickers.processor",
+          "module": "表情包",
+          "title": "专用素材处理会话",
+          "description": "手动导入、扫描和重试复用用户选择的独立 DeepSeek 会话模型，不追加聊天记录；未打开、无模型或不适合处理时明确报错。"
+        },
+        {
+          "id": "stickers.retry",
+          "module": "表情包",
+          "title": "扫描补标签与识别重试",
+          "description": "扫描只为缺少标签的素材排队，已有标签保留；失败素材可逐张重试，手动流程不依赖自动开关。"
+        },
+        {
+          "id": "stickers.library",
+          "module": "表情包",
+          "title": "素材库检索与编辑",
+          "description": "按标签及未分类筛选，搜索缩略图，打开原图预览并编辑；支持删除和本地目录管理，长内容独立滚动。"
+        },
+        {
+          "id": "stickers.original",
+          "module": "表情包",
+          "title": "原图与 GIF 回发",
+          "description": "保留原始 PNG、JPEG、GIF、WebP 字节，持久关联 DSH 归一化预览与原图；无法唯一确定原件时跳过，删除、改名和重载后复核关联。"
+        },
+        {
+          "id": "stickers.storage",
+          "module": "表情包",
+          "title": "目录、容量和迁移保护",
+          "description": "使用已登记工作区的表情目录，校验单图与全库容量；旧素材按内容核对后迁移并保留备份，冲突不覆盖，删除同步清理对应原件。"
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "title": "长期记忆与语义召回",
+      "items": [
+        {
+          "id": "memory.memory",
+          "module": "长期记忆",
+          "title": "自动长期记忆读写",
+          "description": "支持全局与会话开关、会话或工作区范围，记忆携带时间；长期事实与事件分别处理，JSON 是唯一正文数据源。"
+        },
+        {
+          "id": "memory.recall",
+          "module": "长期记忆",
+          "title": "关键词证据与事实召回",
+          "description": "中文词典分词与稀有度证据筛选候选，支持问句信息量、证据门槛、条数、字数和日配额；常驻事实与事件按权限和预算注入。"
+        },
+        {
+          "id": "memory.decay",
+          "module": "长期记忆",
+          "title": "遗忘、激活与排序",
+          "description": "按半衰期、重要度、情绪、激活和时间排序，弱化不等于删除；支持长期事实更新及去重，避免无关事件被补进上下文。"
+        },
+        {
+          "id": "memory.expand",
+          "module": "长期记忆",
+          "title": "自动扩词与线索",
+          "description": "可对当前库补充线索词，关闭后保留原关键词行为；跨库召回不触发对其他库的后台改写。"
+        },
+        {
+          "id": "memory.isolation",
+          "module": "长期记忆",
+          "title": "可信来源分库",
+          "description": "QQ 私聊独立、普通群共享、隔离群独立；主人可信私聊仅能读同机器人下当前授权库，未知来源、歧义或绑定失效时拒绝跨库。"
+        },
+        {
+          "id": "memory.management",
+          "module": "长期记忆",
+          "title": "单层记忆库管理",
+          "description": "固定导航集中管理条目、新增、库内称呼、整理、档案、回收站、诊断与索引；支持检索筛选、原库定位及窄屏布局。"
+        },
+        {
+          "id": "memory.edit",
+          "module": "长期记忆",
+          "title": "条目操作与批量整理",
+          "description": "支持手动新增、编辑、删除、恢复、整理、档案生成及导入导出；管理请求固定原 storeId，权限变化后拒绝过期操作。"
+        },
+        {
+          "id": "memory.profile",
+          "module": "长期记忆",
+          "title": "档案与事实对象",
+          "description": "支持 Markdown / 纯文本档案提炼候选并确认入库、库内称呼及事实键；无法可靠区分对象的群消息不跨记录自动替代和合并。"
+        },
+        {
+          "id": "memory.trace",
+          "module": "长期记忆",
+          "title": "召回诊断与来源追踪",
+          "description": "记录关键词证据、语义相似度、相关判定、排序、向量缺失及回退原因；跨库候选可跳回原库，聚合结果不写回单库。"
+        },
+        {
+          "id": "memory.migration",
+          "module": "长期记忆",
+          "title": "旧数据可信迁移",
+          "description": "先预览来源与待处理原因，再备份并迁移可信条目；保留原件、删除墓碑与幂等收据，不凭当前绑定猜测旧数据归属。"
+        },
+        {
+          "id": "memory.semantic",
+          "module": "长期记忆",
+          "title": "Qwen 混合语义召回",
+          "description": "可选 DashScope Embedding，支持服务、模型、维度、门槛、候选数及超时；关键词与语义分别判断相关后共同排序，无需向量数据库。"
+        },
+        {
+          "id": "memory.credentials",
+          "module": "长期记忆",
+          "title": "只写密钥与配置保护",
+          "description": "优先宿主凭据引用并兼容环境变量，管理状态不返回密钥；更换服务、模型、维度或凭据不改正文数据。"
+        },
+        {
+          "id": "memory.index",
+          "module": "长期记忆",
+          "title": "索引补齐、续跑和重建",
+          "description": "按库和模型配置缓存向量，支持补齐、中断后继续及重建；正文哈希、删除状态与清库代次阻止过期结果复活。"
+        },
+        {
+          "id": "memory.fallback",
+          "module": "长期记忆",
+          "title": "超时与缺能力降级",
+          "description": "未启用、无密钥、缺向量、超时或服务失败时回退关键词；宿主缺少可等待组装阶段时明确降级，不阻塞同步上下文回调。"
+        },
+        {
+          "id": "memory.assembly",
+          "module": "长期记忆",
+          "title": "当轮查询与权限复核",
+          "description": "在可等待的宿主组装阶段完成当前查询，共享重复准备请求；跨库只读候选先按可信来源过滤，查询缓存含权限与正文版本。"
+        },
+        {
+          "id": "memory.usage",
+          "module": "长期记忆",
+          "title": "RAG 用量记录",
+          "description": "记录查询与索引请求的实际返回 Token、失败和未知用量，缓存命中不重复计费；按工作区、会话和日期供用量统计读取。"
+        },
+        {
+          "id": "memory.repair",
+          "module": "长期记忆",
+          "title": "日期与长期事实检查",
+          "description": "诊断缺失日期和事实分类，支持从正文补日期、重新判定和批量处理，执行前自动备份；模型辅助操作可能产生用量。"
+        },
+        {
+          "id": "memory.deduplication",
+          "module": "长期记忆",
+          "title": "重复记忆检测与合并",
+          "description": "区分真实重复与汇总明细关系，可预览后合并并保留备份；回收站支持找回合并记录，避免误删有效明细。"
+        },
+        {
+          "id": "memory.recycle",
+          "module": "长期记忆",
+          "title": "回收站与彻底清理",
+          "description": "支持逐条和批量找回、确认后彻底删除或清空已删记录；已被替代条目单独处理，避免被普通清空误销毁。"
+        },
+        {
+          "id": "memory.transfer",
+          "module": "长期记忆",
+          "title": "普通库复制与工作区合并",
+          "description": "在允许的普通会话范围复制记忆、处理工作区与会话继承；QQ 库不参与跨库复制、工作区合并或混合档案，始终保持来源隔离。"
+        }
+      ]
+    },
+    {
+      "id": "mood",
+      "title": "心情与挂饰",
+      "items": [
+        {
+          "id": "mood.judge",
+          "module": "鱼的心情",
+          "title": "自动心情与七维情绪",
+          "description": "根据当前范围的对话判断心情变化，支持模型、判断模式、基线与下限；会话模式及工作区模式独立维护状态。"
+        },
+        {
+          "id": "mood.inject",
+          "module": "鱼的心情",
+          "title": "心情上下文注入",
+          "description": "支持关闭、仅标签和事件式注入，配置可信度门槛、每日额度及变化信号；不将所有内部数值无条件加入每轮对话。"
+        },
+        {
+          "id": "mood.decay",
+          "module": "鱼的心情",
+          "title": "心情回归与衰减",
+          "description": "按小时半衰期回归基线，结合独立绑定实例保存状态，避免切换范围误用其他会话心情。"
+        },
+        {
+          "id": "mood.binding",
+          "module": "鱼的心情",
+          "title": "跟随 QQ 来源归属",
+          "description": "默认复用已核验记忆库隔离：私聊独立、普通群共享、隔离群独立；也可显式配置会话或工作区范围。"
+        },
+        {
+          "id": "mood.history",
+          "module": "鱼的心情",
+          "title": "完整变化记录",
+          "description": "通过模态框按日期筛选或查看全部已保存记录，保留时间、变化及原因，长内容独立滚动。"
+        },
+        {
+          "id": "mood.charm",
+          "module": "鱼的心情",
+          "title": "可拖拽挂饰与悬浮卡片",
+          "description": "挂饰提供心情形象、数值和七维情绪，可拖动、缩放、打开或收起液态玻璃卡片；位置、大小与透明度偏好在浏览器保存。"
+        },
+        {
+          "id": "mood.portraits",
+          "module": "鱼的心情",
+          "title": "五档全身像与半身像",
+          "description": "逐图点击上传、预览及恢复默认，支持 PNG、JPEG、GIF、WebP；图片签名、体积与目标参数均经过鉴权校验，立即同步挂饰。"
+        },
+        {
+          "id": "mood.dedup",
+          "module": "鱼的心情",
+          "title": "SHA-256 内容去重",
+          "description": "上传图片以内容哈希及实际格式命名，相同图片跨位置共用文件；旧自定义素材迁移去重，仅清理已无引用文件。"
+        },
+        {
+          "id": "mood.animation",
+          "module": "鱼的心情",
+          "title": "上传轮廓与平滑反馈",
+          "description": "按透明通道生成贴图轮廓提示，悬浮或聚焦时平滑显示加号与暗化；兼容触屏、不可采样图片和减少动态效果。"
+        },
+        {
+          "id": "mood.lifecycle",
+          "module": "鱼的心情",
+          "title": "挂饰加载与主题同步",
+          "description": "宿主脚本和客户端共用实例，升级时清理旧监听与轮询；重挂载恢复状态，深浅主题与页面保持一致。"
+        },
+        {
+          "id": "mood.popup_mode",
+          "module": "鱼的心情",
+          "title": "心情、开销与随机记忆卡片",
+          "description": "挂饰弹出卡片可选择今日心情、当前工作区今日 Token 与估算开销，或心情绑定范围内的随机记忆；读取失败明确显示状态。"
+        }
+      ]
+    },
+    {
+      "id": "speak",
+      "title": "主动搭话",
+      "items": [
+        {
+          "id": "speak.schedule",
+          "module": "主动搭话",
+          "title": "按时机主动开口",
+          "description": "针对选中会话定期本地判定是否搭话，命中后复用会话的人格、历史、工具与记忆；未命中本地判定不调用模型。"
+        },
+        {
+          "id": "speak.quiet",
+          "module": "主动搭话",
+          "title": "安静时段与时区",
+          "description": "支持跨午夜时段、明确时区及生效时区展示，自动触发与手动真发都遵守安静配置。"
+        },
+        {
+          "id": "speak.timing",
+          "module": "主动搭话",
+          "title": "峰谷、冷却与时机因子",
+          "description": "配置峰谷命中线、近远阈值和因子、未命中累积加成及上限；命中线不等于保证触发概率。"
+        },
+        {
+          "id": "speak.targets",
+          "module": "主动搭话",
+          "title": "工作区内目标选择",
+          "description": "从 QQ 绑定工作区成员中选择已打开且未归档的会话，保留原会话身份，不自动将工作区外目标纳入授权。"
+        },
+        {
+          "id": "speak.preview",
+          "module": "主动搭话",
+          "title": "试运行、演练与手动真发",
+          "description": "提供安全演练与实际执行入口，手动操作先保存输入；自动试运行避免真实搭话，实际投递按当前配置判断。"
+        },
+        {
+          "id": "speak.concurrent",
+          "module": "主动搭话",
+          "title": "迟到投递与并发保护",
+          "description": "投递及 QQ 出站前复查总开关、试运行、目标、会话实例、安静时段和忙闲状态，防止重叠或卸载后的残留执行。"
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "title": "开放平台",
+      "items": [
+        {
+          "id": "platform.catalog",
+          "module": "开放平台",
+          "title": "提供方与接口目录",
+          "description": "集中显示已注册插件、能力、配置和接入状态，卡片开关控制启用，点击查看详细 Schema 与接口测试；失效或删除项不自动恢复授权。"
+        },
+        {
+          "id": "platform.native",
+          "module": "开放平台",
+          "title": "原生 DSH 插件接入",
+          "description": "通过 schemaVersion、transport、id 三字段引用同宿主插件清单，复用宿主执行上下文；导入不执行代码、不自动授予权限。"
+        },
+        {
+          "id": "platform.http",
+          "module": "开放平台",
+          "title": "HTTP JSON 接口与多接口编辑",
+          "description": "支持手动创建提供方、多个 POST JSON 接口、请求与返回 Schema、示例和认证请求头；独立表单保留输入，保存前集中校验。"
+        },
+        {
+          "id": "platform.authorization",
+          "module": "开放平台",
+          "title": "逐会话即时授权",
+          "description": "仅在 QQ 绑定工作区内的映射会话授予工具，接入开关与会话授权分别保存；默认无授权，撤销或绑定变化时重查在途调用。"
+        },
+        {
+          "id": "platform.isolation",
+          "module": "开放平台",
+          "title": "提供方会话隔离",
+          "description": "适配插件可声明并切换隔离，可信执行上下文含会话与实时复核函数；页面测试采用独立本机范围，切换后清空旧响应。"
+        },
+        {
+          "id": "platform.schema",
+          "module": "开放平台",
+          "title": "Schema、OpenAPI 与接口测试",
+          "description": "生成 OpenAPI 3.1，展示嵌套字段、格式化 JSON、请求响应与失败状态；校验输入输出、请求体积与重定向，不把请求失败显示为成功。"
+        },
+        {
+          "id": "platform.account",
+          "module": "开放平台",
+          "title": "DeepSeek 账户余额",
+          "description": "复用 DSH 已登录账户获取充值钱包与赠送钱包余额，金额保留原始字符串；接口调用继续受开启及会话授权控制。"
+        },
+        {
+          "id": "platform.skills",
+          "module": "开放平台",
+          "title": "大肥鱼技能库",
+          "description": "只读查询自身功能、配置参数、当前会话条件和不可用原因，以及已注册接口元数据；白名单投影保留零值与 false，不泄漏凭据、消息或其他会话配置。"
+        },
+        {
+          "id": "platform.rice",
+          "module": "开放平台",
+          "title": "吃大米饭只读接口",
+          "description": "授权后提供工作区用量、本会话汇总与 Token 明细及缓存率；当前会话由可信上下文确定，主人不绕过会话边界。"
+        },
+        {
+          "id": "platform.persistence",
+          "module": "开放平台",
+          "title": "接入配置保存与撤销",
+          "description": "定义、认证和授权持久保存，损坏配置不覆盖；删除提供方经确认撤销工具和授权，保留插件业务数据，恢复后需重新开启和授权。"
+        },
+        {
+          "id": "platform.developer",
+          "module": "开放平台",
+          "title": "接入规范与开发提示词",
+          "description": "提供原生引用、manifest、Schema、权限、存储与响应完整示例，以及可复制的插件开发提示词；接入插件可导出对应 API 引用配置。"
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "title": "图片、文件与本地数据",
+      "items": [
+        {
+          "id": "files.archives",
+          "module": "文件管理",
+          "title": "QQ 图片和文件归档管理",
+          "description": "按当前登记工作区和记忆来源分目录管理，展示名称、来源、时间与大小；支持图片预览、下载、删除确认及打开本地文件夹。"
+        },
+        {
+          "id": "files.permissions",
+          "module": "文件管理",
+          "title": "来源校验与跨群访问",
+          "description": "私聊与隔离群归档独立，普通群共享，主人读取沿用可信库权限；旧数据归属无法核验时拒绝转发，不凭任意本地路径授权。"
+        },
+        {
+          "id": "files.integrity",
+          "module": "文件管理",
+          "title": "下载、容量与取消保护",
+          "description": "限制数量、大小和允许域名，重定向重新校验，分块流核验顺序及完成状态；超限、取消或不完整写入清理临时内容。"
+        },
+        {
+          "id": "files.separation",
+          "module": "文件管理",
+          "title": "归档与原会话附件分离",
+          "description": "删除归档副本不删除 DSH 附件，关闭存储只停止新增归档；切换工作区不自动搬动或清空旧文件。"
+        },
+        {
+          "id": "files.secrets",
+          "module": "文件管理",
+          "title": "本机配置与凭据边界",
+          "description": "插件配置、来源登记和记忆保留兼容数据路径，敏感配置限制本地权限，Token 不下发浏览器；管理接口沿用宿主鉴权和同源校验。"
+        }
+      ]
+    },
+    {
+      "id": "rice",
+      "title": "Token 与鱼粮统计",
+      "items": [
+        {
+          "id": "rice.usage",
+          "module": "吃大米饭",
+          "title": "今日与累计 Token 和费用",
+          "description": "按绑定工作区及会话统计输入、输出、缓存、RAG Token 和人民币估算费用，进入页面自动读取，手动刷新有忙碌及失败状态。"
+        },
+        {
+          "id": "rice.sessions",
+          "module": "吃大米饭",
+          "title": "按会话明细与名称",
+          "description": "会话用量区分来源与归属，显示模型 Token、缓存率和 Qwen RAG，详情采用可滚动列表并保留空数据兼容。"
+        },
+        {
+          "id": "rice.charts",
+          "module": "吃大米饭",
+          "title": "趋势与热力图",
+          "description": "提供每日趋势、活动热力图和悬浮明细，RAG 并入对应日期与会话总量；金额是估算口径，不替代服务商账单。"
+        },
+        {
+          "id": "rice.cache",
+          "module": "吃大米饭",
+          "title": "缓存命中率",
+          "description": "模型缓存读取 Token 除以模型输入 Token，零输入返回零；RAG 单列并从模型缓存率分母扣除。"
+        },
+        {
+          "id": "rice.rag",
+          "module": "吃大米饭",
+          "title": "查询与索引用量合并",
+          "description": "从真实外部 RAG 请求记录累计，保留失败和未知 Token 状态，缓存复用不重复计数，不推算未记录的历史用量。"
+        },
+        {
+          "id": "rice.daily_limit",
+          "module": "吃大米饭",
+          "title": "每日鱼粮上限",
+          "description": "设置人民币估算上限，零为关闭；达到上限自动关闭 QQ 总开关，临近上限提供提醒，并处理跨日、重启去重和设置变化。"
+        },
+        {
+          "id": "rice.low_balance",
+          "module": "吃大米饭",
+          "title": "低余额主人提醒",
+          "description": "设置余额阈值，经有效主人与后端发送私聊提醒，尊重试运行；余额恢复后重新允许提醒，失败可重试且不伪造成功。"
+        }
+      ]
+    },
+    {
+      "id": "logs",
+      "title": "运行日志与诊断",
+      "items": [
+        {
+          "id": "logs.runtime",
+          "module": "运行日志",
+          "title": "统一运行日志",
+          "description": "以终端样式显示 QQ 桥运行日志，自动轮询刷新、展示时间与行数并滚动到最新内容；连接中断时保留已有记录和具体错误。"
+        },
+        {
+          "id": "logs.trace",
+          "module": "运行日志",
+          "title": "错误与操作状态",
+          "description": "重要异步操作保留具体失败原因、进度和重试入口；请求取消或配置变化后忽略过期响应，避免将失败显示为无更新或已完成。"
+        }
+      ]
+    },
+    {
+      "id": "updates",
+      "title": "更新、来源与更新日志",
+      "items": [
+        {
+          "id": "updates.channels",
+          "module": "更新系统",
+          "title": "正式与私有内测渠道",
+          "description": "保留国内 npm 镜像、GitHub 正式仓库和私有内测选择；正式源固定为 RabbitStudioChino/dsh-big-fish-aio，内测固定为鉴权的私有 demo 仓库。"
+        },
+        {
+          "id": "updates.beta",
+          "module": "更新系统",
+          "title": "内测确认与 Token",
+          "description": "切换内测先弹出内部测试提示，弹窗内确认切换后再鉴权或保存；Token 仅在本机保存，更新检查以完整提交 SHA 判断，界面显示短 SHA。"
+        },
+        {
+          "id": "updates.latest",
+          "module": "更新系统",
+          "title": "直接更新到最新目标",
+          "description": "按所选渠道检查并安装最新一版，安装前刷新目标、固定 SHA 和校验版本；成功安装记录用于避免宿主延迟重载导致重复提醒。"
+        },
+        {
+          "id": "updates.notifier",
+          "module": "更新系统",
+          "title": "后台检查与侧栏圆点",
+          "description": "启动、约三十分钟及切回窗口按节流补查，加入随机偏移和失败退避；发现更新保留圆点，更新页直接变为立即更新，不在安装前自动弹出日志。"
+        },
+        {
+          "id": "updates.modal",
+          "module": "更新系统",
+          "title": "安装后自动展示更新日志",
+          "description": "安装成功后记录待展示目标，插件重载后等待窗口可见且其他模态框关闭，再展示当前包日志；使用半透明遮罩，支持关闭、Esc、键盘焦点约束和焦点恢复。"
+        },
+        {
+          "id": "updates.reminder",
+          "module": "更新系统",
+          "title": "按安装目标持久去重",
+          "description": "成功安装后以渠道、版本和完整提交记录待展示目标，关闭日志后保存至当前 profile；同一目标不重复弹出，同版本内测新 SHA 可再次提醒，安装失败不产生成功日志。"
+        },
+        {
+          "id": "updates.journal",
+          "module": "更新系统",
+          "title": "本地分类日志与历史浏览",
+          "description": "从安装包本地读取逐版本日志，桌面双栏、窄屏单栏，分类编号、空分类隐藏、纯文本换行和 HTTPS 链接校验保持一致；可查看随包历史，底部明确显示已安装版本，不再提供安装按钮。"
+        },
+        {
+          "id": "updates.target_change",
+          "module": "更新系统",
+          "title": "安装目标变化再次确认",
+          "description": "前端和服务端安装锁内再次核验目标；变化时只刷新版本并提示用户再次确认，不提前弹出日志，也不静默安装其他目标。"
+        },
+        {
+          "id": "updates.installation",
+          "module": "更新系统",
+          "title": "安装来源、完整性与串行保护",
+          "description": "限制包名、仓库和安装渠道，保留镜像包大小及 SHA-512 校验、鉴权、来源切换确认与安装串行锁；展示安装进度并在成功后重开面板。"
+        },
+        {
+          "id": "updates.artwork",
+          "module": "更新系统",
+          "title": "安装结果贴纸与过渡",
+          "description": "更新卡片默认固定 sticker-update，成功或失败切换对应结果图；预加载解码后淡入、位移缩放与柔焦过渡，支持减少动态效果和当前窗口重载恢复。"
+        },
+        {
+          "id": "updates.service",
+          "module": "更新系统",
+          "title": "日志随包分发与本地校验",
+          "description": "版本直接从所选 npm 或 GitHub 来源检查；逐版本 changelog-v版本.json 纳入安装包，本地读取校验格式、对应版本、文件大小和取消，不请求 Web 版本服务。"
+        },
+        {
+          "id": "updates.private_logs",
+          "module": "更新系统",
+          "title": "内测随包日志与准确状态",
+          "description": "内测仍以 Token 拉取私有仓库与完整 SHA 安装；日志安装后从本地包读取，不再请求独立日志分支。缺失或损坏时明确显示状态并支持重试，管理接口继续鉴权。"
+        },
+        {
+          "id": "updates.provenance",
+          "module": "更新系统",
+          "title": "原作者与来源基线",
+          "description": "更新页展示四个原作者仓库、整合时版本及提交，保留完整许可和第三方声明；维护入口统一收归大肥鱼，不再展示独立派生仓库。"
+        },
+        {
+          "id": "updates.reload",
+          "module": "更新系统",
+          "title": "热重载完成后恢复面板",
+          "description": "等待宿主模块重载结束后异步恢复面板，成功只切换一次；卸载时取消旧实例的定时器和订阅，安装返回后不再调用旧实例切页。更新日志也等待宿主就绪后再展示。"
+        },
+        {
+          "id": "updates.mood_unmount",
+          "module": "鱼的心情",
+          "title": "修复更新或离开心情页面时的全局白屏",
+          "description": "心情页面不再将网络请求的 Promise 返回给 React 作为清理函数；卸载时正确停止轮询，同时恢复模型列表加载和定时状态刷新。"
+        },
+        {
+          "id": "updates.repository_checks",
+          "module": "开发维护",
+          "title": "仓库规范与公开内容检查",
+          "description": "补充代码检查、合成测试与持续集成；明确运行文件打包白名单，隔离私有开发材料，保留原作者许可与现有功能、主题和资源路径。"
+        },
+        {
+          "id": "updates.scope_regressions",
+          "module": "缺陷修复",
+          "title": "修正档案扫描与语音回退的变量作用域",
+          "description": "排除候选名字后按当前档案目录重新扫描；系统没有 ffmpeg 时正确使用已配置语音环境查找内置程序。"
+        },
+        {
+          "id": "updates.management_auth",
+          "module": "安全修复",
+          "title": "鉴权不可用时拒绝管理请求",
+          "description": "QQ、记忆、心情和主动搭话不再在宿主鉴权缺失或报错时放行；返回 503 并停止读写，正常授权与原有界面保持不变。"
+        }
+      ]
+    }
+  ]
+}

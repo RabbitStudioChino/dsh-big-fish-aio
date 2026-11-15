@@ -1,0 +1,316 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { createStickers } from '../modules/qq/lib/stickers.mjs'
+const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
+function fixture() {
+  const home = mkdtempSync(join(tmpdir(), 'fish-stickers-')), requests = [], logs = []
+  mkdirSync(join(home,'storages'));mkdirSync(join(home,'BigFish'))
+  writeFileSync(join(home,'storages/workspace.json'),JSON.stringify({tables:{workspaces:{fish:{path:join(home,'BigFish')}}}}))
+  writeFileSync(join(home,'qq-bridge-config.json'),JSON.stringify({工作区:'fish'}))
+  let result = { id: null }
+  const ctx = { llm: { async *stream(input) { requests.push(input); yield { type: 'text-delta', text: JSON.stringify(result) } } }, get: () => ({ requestRejection: () => undefined }) }
+  const agent = { options: { provider: 'fake', model: 'fake' }, session: { snapshotEvents: () => [{ type: 'user/message', data: { source: { kind: 'qq' }, content: [{type:'text',text:'终于考过了'}] } }] } }
+  let resolveAgent = () => agent
+  ctx.agents = { list: () => [agent] }
+  const create = () => createStickers({ home, ctx, findAgent: id => resolveAgent(id), log: x => logs.push(x) })
+  const lib=create()
+  lib.settings({autoSend:false,autoCollect:false,autoTag:false,autoClassify:false})
+  return { resolve: fn => { resolveAgent = fn }, home, pictures:join(home,'BigFish','表情包'), ctx, agent, requests, logs, lib, create, result: x => { result = x }, close: () => rmSync(home, {recursive:true,force:true}) }
+}
+test('首次安装启用预览中的表情自动化，已有关闭设置重载后保持', () => {
+  const f = fixture()
+  try {
+    rmSync(join(f.home, 'qq-stickers/catalog.json'))
+    assert.deepEqual(f.create().view().settings, {autoSend:true,cooldownSeconds:120,autoCollect:true,collectGroupStickers:true,collectAllImages:false,autoTag:true,autoClassify:true})
+    f.lib.settings({autoSend:false,autoCollect:false,autoTag:false,autoClassify:false})
+    const settings = f.create().view().settings
+    for (const key of ['autoSend','autoCollect','autoTag','autoClassify']) assert.equal(settings[key], false)
+  } finally { f.close() }
+})
+test('表情原文件、去重、来源隔离、持久保存与元数据更新', () => {
+  const f=fixture();try {
+    const a=f.lib.add({bytes:gif,name:'开心.gif',scope:'a',tags:'开心,开心',scenes:'祝贺'})
+    assert.equal(f.lib.add({bytes:gif,scope:'a'}).id,a.id)
+    assert.notEqual(f.lib.add({bytes:gif,scope:'b'}).id,a.id)
+    assert.deepEqual(readFileSync(join(f.pictures,a.id+'.gif')),gif)
+    f.lib.update(a.id,{tags:['庆祝'],name:'庆祝'});assert.deepEqual(f.create().view().items[0].tags,['庆祝'])
+    assert.throws(()=>f.lib.add({bytes:Buffer.from('<svg/>')}),/只接受/)
+    assert.throws(()=>f.lib.add({bytes:Buffer.alloc(9*1048576)}),/8 MB/)
+    const snapshot=JSON.parse(readFileSync(join(f.home,'qq-stickers/catalog.json'),'utf8'));snapshot.items=snapshot.items.filter(x=>x.id!==a.id);writeFileSync(join(f.home,'qq-stickers/catalog.json'),JSON.stringify(snapshot));assert.equal(f.lib.add({bytes:gif,scope:'a'}).id,a.id,'崩溃留下的原文件可重新入库')
+    f.lib.remove(a.id);assert.equal(f.lib.view().items.length,1)
+    writeFileSync(join(f.home,'qq-stickers/catalog.json'),'broken')
+    assert.throws(()=>f.lib.add({bytes:gif}),/JSON/);assert.equal(readFileSync(join(f.home,'qq-stickers/catalog.json'),'utf8'),'broken')
+  }finally{f.close()}
+})
+test('语境选择携带上下文、严格候选 ID、共享素材及会话独立冷却；关闭时不消耗模型',async()=>{
+ const f=fixture();try{
+  const a=f.lib.add({bytes:gif,scope:'a',name:'庆祝',tags:'开心',scenes:'考试成功'})
+  const b=f.lib.add({bytes:gif,scope:'b',name:'其他聊天共享素材'})
+  f.result({id:a.id});assert.deepEqual(await f.lib.select('太好了，恭喜你','a'),[]);assert.equal(f.requests.length,0)
+  f.lib.settings({autoSend:true});assert.equal((await f.lib.select('太好了，恭喜你','a')).length,1)
+  assert.match(JSON.stringify(f.requests[0]),/终于考过了/);assert.ok(JSON.stringify(f.requests[0]).includes(b.id))
+  assert.deepEqual(await f.lib.select('继续庆祝','a'),[]);assert.equal(f.requests.length,1)
+  f.result({id:a.id});assert.equal((await f.lib.select('开心','b')).length,1)
+  const reloaded=f.create();f.result({id:'f'.repeat(64)});assert.deepEqual(await reloaded.select('开心','a'),[])
+  f.result({id:null});assert.deepEqual(await reloaded.select('我难过','a'),[])
+  f.ctx.llm.stream=async function*(){throw new Error('offline')};assert.deepEqual(await reloaded.select('开心','a'),[])
+  assert.throws(()=>f.lib.settings({cooldownSeconds:0}),/冷却/)
+ }finally{f.close()}
+})
+test('表情管理路由拒绝未授权、路径穿越、超限和无效文件',async()=>{
+ const f=fixture();try{
+  const routes=new Map();let denied=false
+  f.ctx.get=()=>({requestRejection:()=>denied?403:undefined})
+  f.lib.register({route:(path,handler)=>routes.set(path,handler),protect:fn=>async(req,res)=>{if(denied)throw new Error('forbidden');return fn(req,res)},json:(res,value)=>res.end(JSON.stringify(value)),config:()=>({绑定:[{会话:'a'}]})})
+  const call=async(path,body)=>{let raw;const req=Readable.from(body===undefined?[]:[JSON.stringify(body)]);Object.assign(req,{method:body===undefined?'GET':'POST',url:'/dsh-qq-bridge/stickers'+path});await routes.get('/dsh-qq-bridge/stickers'+path.split('?')[0])(req,{setHeader(){},end(v){raw=v}});return raw}
+  denied=true;await assert.rejects(call(''),/forbidden/);denied=false
+  await call('/import',{scope:'foreign',base64:gif.toString('base64')})
+  assert.equal(JSON.parse(await call('')).items[0].scope,'foreign')
+  await assert.rejects(call('/import',{base64:Buffer.from('<svg/>').toString('base64')}),/只接受/)
+  await assert.rejects(call('/import',{base64:Buffer.alloc(9*1048576).toString('base64')}),/大小上限/)
+  await assert.rejects(call('/file?id=../../password'),/无效/)
+  await call('/import',{scope:'a',base64:gif.toString('base64'),name:'原图'})
+  const item=JSON.parse(await call('')).items[0]
+  assert.deepEqual(await call('/file?id='+item.id),gif)
+ }finally{f.close()}
+})
+
+test('自动收藏独立于回复：识别表情、保留 GIF、去重、普通图片开关和错误回退',async()=>{
+ const f=fixture(),original=globalThis.fetch;try{
+  const settle=async()=>{for(let i=0;i<30;i++)await new Promise(setImmediate)}
+  const face={message_id:1,message:[{type:'mface',data:{file:'base64://'+gif.toString('base64'),summary:'开心'}}]}
+  f.lib.capture(face,'a','source-a');await settle();assert.equal(f.lib.view().items.length,0)
+  f.lib.settings({autoCollect:true});f.lib.capture(face,'a','source-a');await settle()
+  const item=f.lib.view().items[0];assert.equal(item.scope,'a');assert.equal(item.source,'source-a');assert.deepEqual(readFileSync(join(f.pictures,item.id+'.gif')),gif)
+  f.lib.capture({...face,message_id:2},'a','source-a');await settle();assert.equal(f.lib.view().items.length,1)
+  const plain={message_id:3,message:[{type:'image',data:{file:'base64://'+Buffer.concat([gif,Buffer.from('more')]).toString('base64')}}]}
+  f.lib.capture(plain,'a','source-a');await settle();assert.equal(f.lib.view().items.length,1)
+  f.lib.settings({collectAllImages:true});f.lib.capture(plain,'a','source-a');await settle();assert.equal(f.lib.view().items.length,2)
+  f.lib.capture({...face,message_id:4},'a','source-a',()=>false);await settle();assert.equal(f.lib.view().items.length,2)
+  let downloads=0;globalThis.fetch=async()=>{downloads++;return new Response(gif)}
+  f.lib.capture({message_id:5,message:[{type:'mface',data:{url:'http://127.0.0.1/secrets'}}]},'a','source-a');await settle();assert.equal(downloads,0);assert.match(f.lib.view().collection.error,/QQ 官方/)
+  f.lib.capture({message_id:6,message:[{type:'mface',data:{url:'https://gchat.qpic.cn/sticker.gif'}}]},'a','source-a');await settle();assert.equal(downloads,1)
+  assert.deepEqual(await f.lib.select('开心','a'),[]);assert.equal(f.requests.length,0)
+  f.lib.settings({autoSend:true});f.result({id:item.id});assert.equal((await f.lib.select('开心','a')).length,1);assert.equal(f.requests.length,1)
+ }finally{globalThis.fetch=original;f.close()}
+})
+
+test('群聊收藏独立开关兼容旧设置，关闭拦截待入库群表情且不影响私聊', async () => {
+  const f = fixture()
+  const settle = async () => { for (let i = 0; i < 30; i++) await new Promise(setImmediate) }
+  const face = { message_id: 1, message_type: 'group', message: [{ type: 'mface', data: { file: 'base64://' + gif.toString('base64') } }] }
+  try {
+    assert.equal(f.lib.view().settings.collectGroupStickers, true)
+    f.lib.capture(face, 'group', 'group-source')
+    await settle()
+    assert.equal(f.lib.view().items.length, 0)
+    f.lib.settings({ autoCollect: true })
+    f.lib.capture({ ...face, message_id: 2 }, 'group', 'group-source')
+    f.lib.settings({ collectGroupStickers: false })
+    await settle()
+    assert.equal(f.lib.view().items.length, 0, '下载中关闭群聊收藏后不入库')
+    assert.equal(f.create().view().settings.collectGroupStickers, false)
+    f.lib.capture({ ...face, message_id: 3 }, 'group', 'group-source')
+    f.lib.capture({ ...face, message_id: 4, message_type: 'private' }, 'private', 'private-source')
+    await settle()
+    assert.deepEqual(f.lib.view().items.map(item => item.scope), ['private'])
+    f.lib.settings({ collectGroupStickers: true })
+    f.lib.capture({ ...face, message_id: 5, message_type: undefined }, 'group', 'group-source', () => true, '群')
+    await settle()
+    assert.equal(f.lib.view().items.length, 2, '桥接绑定类型可识别未携带 message_type 的群消息')
+    assert.throws(() => f.lib.settings({ collectGroupStickers: 'false' }), /布尔值/)
+  } finally { f.close() }
+})
+
+test('自动视觉标签：真实图片入参、已有标签保护、错误重试与删除不复活',async()=>{
+ const f=fixture();try{
+  const admitted=[]
+  f.ctx.attachments={async admitPromptContent(content){admitted.push(content);return content.map(x=>x.type==='image'?{type:'image',attachment:{attachmentId:'fixture'}}:x)}}
+  const wait=async()=>{for(let i=0;i<40;i++)await new Promise(setImmediate)}
+  f.lib.settings({autoTag:true});f.result({tags:['开心','庆祝'],scenes:['恭喜考试通过']})
+  const a=f.lib.add({bytes:gif,scope:'a',name:'表情原图'});await wait()
+  let item=f.lib.view().items[0];assert.equal(item.tagStatus,'complete');assert.deepEqual(item.tags,['开心']);assert.equal(admitted.length,1)
+  assert.equal(admitted[0][1].data,gif.toString('base64'));assert.ok(f.requests[0].messages[0].content.some(x=>x.type==='image'&&x.attachment))
+  f.lib.update(a.id,{tags:['人工标签']});f.result({tags:['模型覆盖'],scenes:['新场景']});f.lib.enqueueTags(a.id);await wait();assert.deepEqual(f.lib.view().items[0].tags,['人工标签'])
+  const b=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('b')]),scope:'a'});f.result({tags:[],scenes:[]});await wait();assert.equal(f.lib.view().items.find(x=>x.id===b.id).tagStatus,'error')
+  f.result({tags:['抱抱'],scenes:['安慰朋友'],description:'张开双手拥抱'});f.lib.enqueueTags(b.id);await wait();assert.equal(f.lib.view().items.find(x=>x.id===b.id).tagStatus,'complete')
+  let release;const gate=new Promise(r=>release=r)
+  f.ctx.llm.stream=async function*(){await gate;yield{type:'text-delta',text:JSON.stringify({tags:['迟到'],scenes:['迟到结果']})}}
+  const c=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('c')]),scope:'a'});await new Promise(setImmediate);f.lib.remove(c.id);release();await wait();assert.ok(!f.lib.view().items.some(x=>x.id===c.id))
+  f.lib.settings({visionProvider:'旧配置'});assert.equal(f.lib.view().settings.visionProvider,undefined)
+ }finally{f.close()}
+})
+
+test('自动分类随导入、编辑和视觉结果更新；手动分类不被覆盖',async()=>{
+ const f=fixture();try{
+  f.lib.settings({autoClassify:true})
+  const a=f.lib.add({bytes:gif,scope:'a',tags:'开心,庆祝',scenes:'恭喜朋友'})
+  assert.equal(f.lib.view().items[0].category,'开心庆祝')
+  f.lib.update(a.id,{tags:['抱抱'],scenes:['安慰朋友']});assert.equal(f.lib.view().items[0].category,'安慰陪伴')
+  f.lib.update(a.id,{category:'日常互动'});f.lib.update(a.id,{tags:['生气']});f.lib.classify();assert.equal(f.lib.view().items[0].category,'日常互动')
+  f.lib.update(a.id,{category:''});assert.notEqual(f.lib.view().items[0].categorySource,'manual')
+  assert.throws(()=>f.lib.update(a.id,{category:'<script>'}),/不支持/)
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  f.result({tags:['惊讶'],scenes:['看到意外消息'],category:'惊讶震惊'})
+  const b=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('classified')]),scope:'a'})
+  f.lib.enqueueTags(b.id);for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.equal(f.lib.view().items.find(x=>x.id===b.id).category,'惊讶震惊')
+  assert.equal(f.lib.view().items.find(x=>x.id===b.id).categorySource,'vision')
+ }finally{f.close()}
+})
+
+test('进行中的选图遵守关闭开关；标注遵守手动编辑版本',async()=>{
+ const f=fixture();try{
+  const a=f.lib.add({bytes:gif,scope:'a'});f.lib.settings({autoSend:true})
+  let release;let gate=new Promise(r=>release=r)
+  f.ctx.llm.stream=async function*(){await gate;yield{type:'text-delta',text:JSON.stringify({id:a.id,tags:['模型标签'],scenes:['安慰']})}}
+  const pending=f.lib.select('可以抱抱吗','a');await new Promise(setImmediate);f.lib.settings({autoSend:false});release();assert.deepEqual(await pending,[])
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  gate=new Promise(r=>release=r);f.lib.enqueueTags(a.id);await new Promise(setImmediate);f.lib.update(a.id,{tags:['手动保留']});release();for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.deepEqual(f.lib.view().items[0].tags,['手动保留']);assert.equal(f.lib.view().items[0].tagStatus,'error')
+  let calls=0;gate=new Promise(r=>release=r);f.ctx.llm.stream=async function*(){calls++;await gate;yield{type:'text-delta',text:JSON.stringify({tags:['开心'],scenes:['庆祝']})}}
+  f.lib.settings({autoTag:true});const b=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('paused-b')]),scope:'a'}),c=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('paused-c')]),scope:'a'});await new Promise(setImmediate);f.lib.settings({autoTag:false});release();for(let i=0;i<40;i++)await new Promise(setImmediate);assert.equal(calls,1);assert.equal(f.lib.view().items.find(x=>x.id===b.id).tagStatus,'cancelled');assert.equal(f.lib.view().items.find(x=>x.id===c.id).tagStatus,'cancelled')
+ }finally{f.close()}
+})
+
+
+test('素材处理直接使用现有 DeepSeek 模型，旧视觉配置不再改变路由',async()=>{
+ const f=fixture();try{
+  f.agent.options={provider:'deepseek',model:'bound-session-model'}
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  const a=f.lib.add({bytes:gif,name:'共享表情'})
+  const path=join(f.home,'qq-stickers/catalog.json'),data=JSON.parse(readFileSync(path,'utf8'))
+  data.settings={...data.settings,visionProvider:'obsolete-provider',visionModel:'obsolete-model',analysisSession:'obsolete-session'}
+  writeFileSync(path,JSON.stringify(data));f.result({tags:['开心'],scenes:['庆祝']});f.lib.enqueueTags(a.id)
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.equal(f.lib.view().items[0].tagStatus,'complete');assert.equal(f.requests[0].provider,'deepseek');assert.equal(f.requests[0].model,'bound-session-model');assert.equal(f.requests[0].sessionId,undefined)
+  assert.ok(f.requests[0].messages[0].content.some(x=>x.type==='image'))
+  assert.equal(f.lib.view().settings.visionModel,undefined)
+ }finally{f.close()}
+})
+
+
+test('扫描只识别未打标签素材，超过 32 张完整排队且重复扫描去重',async()=>{
+ const f=fixture();let release;try{
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  const manual=f.lib.add({bytes:gif,tags:['人工标签'],scenes:[]})
+  for(let i=0;i<40;i++)f.lib.add({bytes:Buffer.concat([gif,Buffer.from(String(i))]),scope:'a'})
+  const gate=new Promise(r=>release=r)
+  f.ctx.llm.stream=async function*(input){f.requests.push(input);await gate;yield{type:'text-delta',text:JSON.stringify({tags:['开心'],scenes:['庆祝'],description:'微笑挥手庆祝'})}}
+  f.lib.enqueueTags(undefined,false,true);f.lib.enqueueTags(undefined,false,true)
+  assert.equal(f.lib.view().tagging.pending,40)
+  release()
+  for(let i=0;i<100&&f.lib.view().tagging.pending;i++)await new Promise(setImmediate)
+  assert.equal(f.lib.view().tagging.pending,0);assert.equal(f.requests.length,40)
+  const items=f.lib.view().items
+  assert.equal(items.filter(x=>x.tagStatus==='complete').length,40)
+  assert.deepEqual(items.find(x=>x.id===manual.id).tags,['人工标签'])
+  assert.deepEqual(items.find(x=>x.id===manual.id).scenes,[])
+  f.lib.enqueueTags(undefined,false,true);assert.equal(f.requests.length,40)
+ }finally{release?.();f.close()}
+})
+
+
+test('表情导入和扫描直接调用 DeepSeek，自动命名短标题且保护人工标签',async()=>{
+ const f=fixture();try{
+  f.agent.options={provider:'deepseek',model:'direct-model'}
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  f.result({tags:['模型标签'],scenes:['安慰朋友'],description:'小猫歪头轻轻挥手并露出笑容很开心',category:'安慰陪伴'})
+  const routes=new Map()
+  f.lib.register({route:(path,handler)=>routes.set(path,handler),protect:fn=>fn,json:(res,value)=>res.end(JSON.stringify(value)),config:()=>({绑定:[{会话:'a'}]})})
+  const call=async(path,body)=>{let raw;const req=Readable.from([JSON.stringify(body)]);Object.assign(req,{method:'POST',url:'/dsh-qq-bridge/stickers'+path});await routes.get(req.url)(req,{setHeader(){},end(value){raw=value}});return JSON.parse(raw)}
+  await call('/import',{base64:gif.toString('base64'),scope:'a',tags:'人工标签',name:'不接受上传名称',scenes:['不接受上传场景']})
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  const item=f.lib.view().items[0]
+  assert.equal(item.tagStatus,'complete');assert.deepEqual(item.tags,['人工标签']);assert.ok(item.name.startsWith('人工标签-'));assert.ok(Array.from(item.name).length<=23)
+  assert.equal(item.category,'安慰陪伴');assert.equal(item.autoName,false)
+  assert.equal(f.requests[0].sessionId,undefined);assert.equal(f.requests[0].model,'direct-model');assert.equal(f.requests[0].messages.length,1)
+  assert.deepEqual(f.requests[0].messages[0].content.filter(x=>x.type==='image').length,1)
+  const scanned=f.lib.add({bytes:Buffer.concat([gif,Buffer.from('scan')]),scope:'a'})
+  await call('/tag',{onlyUntagged:true});for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.equal(f.lib.view().items.find(x=>x.id===scanned.id).tagStatus,'complete')
+  f.lib.settings({autoTag:true});f.lib.add({bytes:Buffer.concat([gif,Buffer.from('auto')]),scope:'a'})
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.equal(f.requests.at(-1).sessionId,undefined);assert.equal(f.requests.at(-1).model,'direct-model')
+ }finally{f.close()}
+})
+
+test('命名失败保留原图和待处理状态，可直接调用模型重试成功',async()=>{
+ const f=fixture();try{
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  f.result({tags:['开心'],scenes:['庆祝']})
+  const item=f.lib.add({bytes:gif,manualImport:true})
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  let current=f.lib.view().items[0];assert.equal(current.tagStatus,'error');assert.equal(current.autoName,true);assert.match(current.tagError,/命名/)
+  assert.deepEqual(readFileSync(join(f.pictures,item.id+'.gif')),gif)
+  f.result({tags:['开心'],scenes:['庆祝'],description:'猫猫挥手',category:'问候告别'});assert.equal(f.lib.add({bytes:gif,manualImport:true}).id,item.id)
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  current=f.lib.view().items[0];assert.equal(current.name,'开心-猫猫挥手');assert.equal(current.tagStatus,'complete')
+ }finally{f.close()}
+})
+
+test('原图存入绑定工作区的专用文件夹，旧图迁移保留备份，冲突与缺失工作区不覆盖数据',()=>{
+ const f=fixture();try{
+  const item=f.lib.add({bytes:gif}),target=join(f.pictures,item.id+'.gif'),legacy=join(f.home,'qq-stickers',item.id+'.gif')
+  writeFileSync(legacy,gif);rmSync(target)
+  assert.equal(f.create().view().storage.path,f.pictures);assert.deepEqual(readFileSync(target),gif);assert.equal(existsSync(legacy),true)
+  writeFileSync(target,Buffer.concat([gif,Buffer.from('conflict')]))
+  const conflict=f.create();assert.match(conflict.view().storage.error,/不一致/);assert.throws(()=>conflict.remove(item.id),/不一致/);assert.equal(conflict.view().items.length,1)
+  rmSync(join(f.home,'storages/workspace.json'))
+  const missing=f.create();assert.match(missing.view().storage.error,/工作区/);assert.throws(()=>missing.add({bytes:Buffer.concat([gif,Buffer.from('new')])}),/工作区/);assert.equal(missing.view().items.length,1)
+ }finally{f.close()}
+})
+
+test('扫描直接调用默认 DeepSeek，关闭思考并留足标签输出额度，无需打开会话', async () => {
+ const f=fixture();try {
+  f.ctx.agents.list=()=>[]
+  f.ctx.get=name=>name==='agentDefaultModel'?{currentSelection:()=>({provider:'deepseek-account',model:'deepseek-flash'})}:undefined
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  const item=f.lib.add({bytes:gif})
+  f.ctx.llm.stream=async function*(input){
+   f.requests.push(input)
+   if(input.reasoningEffort!=='off'||input.maxTokens<1000){
+    yield{type:'reasoning-delta',text:'思考耗尽额度'}
+    yield{type:'finish',reason:{kind:'max-tokens'}}
+    return
+   }
+   yield{type:'text-delta',text:JSON.stringify({tags:['挥手'],scenes:['打招呼'],description:'猫猫挥手',category:'问候告别'})}
+   yield{type:'finish',reason:{kind:'stop'}}
+  }
+  f.lib.enqueueTags(undefined,false,true)
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  const current=f.lib.view().items.find(x=>x.id===item.id)
+  assert.equal(current.tagStatus,'complete',current.tagError)
+  assert.deepEqual(current.tags,['挥手'])
+  assert.equal(f.requests.length,1)
+  assert.equal(f.requests[0].provider,'deepseek-account')
+  assert.equal(f.requests[0].sessionId,undefined)
+  assert.equal(f.requests[0].messages.length,1)
+  assert.ok(f.requests[0].messages[0].content.some(x=>x.type==='image'))
+ }finally{f.close()}
+})
+
+test('空正文和输出截断明确报错，保留原图并允许再次扫描成功',async()=>{
+ const f=fixture();try{
+  f.ctx.attachments={async admitPromptContent(content){return content}}
+  const item=f.lib.add({bytes:gif})
+  for(const [kind,expected] of [['stop',/未返回.*结果/],['max-tokens',/长度上限/]]){
+   f.ctx.llm.stream=async function*(){yield{type:'finish',reason:{kind}}}
+   f.lib.enqueueTags(undefined,false,true)
+   for(let i=0;i<40;i++)await new Promise(setImmediate)
+   const current=f.lib.view().items.find(x=>x.id===item.id)
+   assert.equal(current.tagStatus,'error');assert.match(current.tagError,expected)
+   assert.deepEqual(current.tags,[])
+   assert.deepEqual(readFileSync(join(f.pictures,item.id+'.gif')),gif)
+   assert.equal(f.lib.view().tagging.pending,0)
+  }
+  f.ctx.llm.stream=async function*(){yield{type:'text-delta',text:'{"tags":["开心"],"scenes":["庆祝"],"description":"微笑挥手庆祝"}'}}
+  f.lib.enqueueTags(undefined,false,true)
+  for(let i=0;i<40;i++)await new Promise(setImmediate)
+  assert.equal(f.lib.view().items[0].tagStatus,'complete')
+ }finally{f.close()}
+})
