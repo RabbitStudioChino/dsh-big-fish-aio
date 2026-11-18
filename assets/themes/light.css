@@ -43,6 +43,7 @@
   --fish-link: #38549a;
   --fish-success: #2f7d63;
   --fish-warning: #9a641c;
+  --fish-balance-low: #963d4f;
   --fish-danger: #b0475c;
   --fish-info: #3f5d9f;
   --fish-rim: #ffffffd9;
@@ -263,6 +264,19 @@
   --fm-glass-shadow: inset 1px 1px 1px #ffffffd9,inset -1px -1px 1px #a9b7d64d,0 16px 40px #29446e30;
   --fm-glass-highlight: linear-gradient(135deg,#ffffff2e,transparent 42%,#ffffff08);
   color-scheme: light;
+  /* 本地用量海报的三套色库，画布与主题共用同一来源。 */
+  --fish-report-ocean-bg: #111a2d;
+  --fish-report-ocean-surface: #1c2a43;
+  --fish-report-ocean-ink: #f3e9d5;
+  --fish-report-ocean-accent: #e5c889;
+  --fish-report-claude-bg: #faf4ed;
+  --fish-report-claude-surface: #efe4d8;
+  --fish-report-claude-ink: #342d29;
+  --fish-report-claude-accent: #b45c3f;
+  --fish-report-gpt-bg: #f4f9f6;
+  --fish-report-gpt-surface: #e2efe8;
+  --fish-report-gpt-ink: #162d26;
+  --fish-report-gpt-accent: #168263;
 }
 
 :host .fm-panel[data-content=cost] {

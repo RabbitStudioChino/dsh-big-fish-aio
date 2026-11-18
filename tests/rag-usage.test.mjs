@@ -165,17 +165,16 @@ test('吃大米饭合并 Qwen RAG 明细，使用已含 RAG 的总额并兼容�
         const slot = index++
         return [slot === 0 ? data : slot === 4 ? tip : value, next => { if (slot === 4) tip = next }]
       }, useRef: () => ({ current: 0 }), useEffect() {}, useMemo: fn => fn() }
-    const render = vm.runInNewContext(rice + '\nRice', { React, h: React.createElement, FishRefreshButton: 'button' })
+    const render = vm.runInNewContext(readFileSync(new URL('../src/rice-report.js', import.meta.url), 'utf8') + '\n' + rice + '\nRice', { React, h: React.createElement, FishRefreshButton: 'button' })
     const tree = render(), nodes = flatten(tree), text = JSON.stringify(tree)
     assert.ok(!text.includes('每日 RAG 用量') && !text.includes('RAG 估算') && !text.includes('NaN'))
     const cards = nodes.filter(n => n.type === 'article')
-    assert.equal(cards.length, 4)
-    for (const card of cards) {
-      assert.equal(card.children[1].children[0], String(total.total))
-      assert.equal(card.children[2].children[0], '≈ ¥' + total.cost.toFixed(3))
-      assert.equal(card.children[4].children[0], '缓存 10 · RAG ' + (rag.ragTokens || 0))
-      assert.equal(card.children.length, 5)
-    }
+    assert.equal(cards.length, 2)
+    const summaryCard = cards.find(n => n.props.className.includes('rice-summary-card'))
+    const summaryNodes = flatten(summaryCard)
+    assert.equal(summaryNodes.find(n => n.props?.className === 'rice-summary-value').children[0], String(total.total))
+    assert.equal(summaryNodes.find(n => n.props?.className === 'rice-stat-cost').children[0], '≈ ¥' + total.cost.toFixed(3))
+    assert.ok(JSON.stringify(summaryCard).includes('RAG '))
     assert.deepEqual(nodes.filter(n => n.type === 'th').map(n => n.children[0]),
       ['会话', '今日', '全部', '输入', '输出', '缓存', 'Qwen RAG', '金额'])
     const cells = nodes.filter(n => n.type === 'td')

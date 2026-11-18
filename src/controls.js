@@ -17,14 +17,14 @@ function FishRefreshButton({ onClick, busy = false, disabled = false, label = '�
 }
 
 // 顶层 dialog 让弹窗避开滚动容器的裁剪和定位上下文。
-function FishModal({ children, onCancel, ...props }) {
+function FishModal({ children, onCancel, tone, ...props }) {
   const React = require('react'), ref = React.useRef(null)
   React.useLayoutEffect(() => {
     const dialog = ref.current
     dialog.showModal()
     return () => { if (dialog.open) dialog.close() }
   }, [])
-  return React.createElement('dialog', { ...props, ref, role: 'presentation', onCancel: event => { event.preventDefault(); onCancel?.(event) } }, children)
+  return React.createElement('dialog', { ...props, className: (props.className || '') + (tone === 'danger' ? ' fish-modal-danger' : ''), ref, role: 'presentation', onCancel: event => { event.preventDefault(); onCancel?.(event) } }, children)
 }
 
 function FishSwitch({ checked = false, disabled = false, onChange, className = '', ...props } = {}) {

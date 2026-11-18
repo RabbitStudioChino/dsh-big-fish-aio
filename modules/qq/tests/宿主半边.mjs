@@ -25,6 +25,7 @@ const writeFileSync = (路, 数据, ...余) => {
     rmSync(join(家, 'qq-bridge-memory-sources.json'), { force: true })
     try {
       const o = JSON.parse(String(数据))
+      if (Array.isArray(o.绑定)) o.绑定 = o.绑定.map(b => b.类型 === '群' ? { ...b, 读取间隔分: 0 } : b)
       if (o.回复冷却秒 === undefined) o.回复冷却秒 = 0
       if (o.每分钟最多条 === undefined) o.每分钟最多条 = 999
       数据 = JSON.stringify(o, null, 2)

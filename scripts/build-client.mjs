@@ -30,5 +30,6 @@ const output = `// 自动生成：修改 src/panel.js 或 modules/*/lib/client.j
   `const PLATFORM_PLUGIN_PROMPT = ${JSON.stringify(read('docs/open-platform-plugin-prompt.md'))};\n` +
   read('src/open-platform.js') + '\n' +
   read('src/notifications.js') + '\n' +
+  read('src/rice-report.js') + '\n' +
   read('src/panel.js') + '\n} });\n'
 writeFileSync(new URL('client.js', root), output)

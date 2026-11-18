@@ -196,10 +196,10 @@ if (消息钮) {
   下标 = 0
   const 树3 = 组件()
   const 文3 = 可见文(树3)
-  const 要有3 = ['发送格式', '接收与合并', '群聊频率与概率', '回复冷却时间（秒）']
+  const 要有3 = ['发送格式', '接收与合并']
   const 缺3 = 要有3.filter((x) => !文3.includes(x))
   报('配置页保留全部消息与媒体设置', 缺3.length === 0, 缺3.length ? '缺：' + 缺3.join('、') : 文3.length + ' 字节')
-  报('消息策略页不混入空间设置', !文3.includes('允许发布 QQ 空间动态'))
+  报('消息策略页不混入空间、频率与门槛设置', !文3.includes('允许发布 QQ 空间动态') && !文3.includes('逐群读取规则') && 文3.includes('未通过门槛时终止推理'))
 }
 
 // ⭐ 1.5.0：「空间」页四张卡的关键控件
@@ -244,11 +244,12 @@ if (空间钮) {
 const 门槛钮 = 找按钮(树, '消息策略')
 报('回复门槛可从配置页访问', Boolean(门槛钮))
 if (门槛钮) {
+  状态槽[0] = { ...状态槽[0], 配置: { ...状态槽[0].配置, 群聊统一规则: { 门槛: true } } }
   门槛钮.p.onClick()
   下标 = 0
   const 树5 = 组件()
   const 文5 = 可见文(树5)
-  const 要有5 = ['点名后续接收上限（条）', '点名后续接收时限（秒）']
+  const 要有5 = ['回复门槛', '点名后续接收上限（条）', '点名后续接收时限（秒）']
   const 缺5 = 要有5.filter((x) => !文5.includes(x))
   报('群聊区域保留后续消息数量及时限设置', 缺5.length === 0, 缺5.length ? '缺：' + 缺5.join('、') : 文5.length + ' 字节')
   报('门槛页里没有「转发进来会变成什么样」了', !文5.includes('转发进来会变成什么样'))
@@ -675,6 +676,41 @@ try {
   await 渲账号().p.onBlurCapture()
   报('群聊开关可独立关闭，昵称开关保留', 保存账号配置?.允许群聊主人指令 === false && 保存账号配置?.允许改昵称 === true)
 } finally { globalThis.fetch = 账号原fetch }
+
+const 频率原fetch = globalThis.fetch
+try {
+  let 保存频率配置
+  状态槽 = [{ ...初始态, 配置: { ...初始态.配置,
+    群聊统一规则: { 读取间隔分: 10, 读取最多条: 30, 点名必回: true, 门槛: false },
+    绑定: [
+      { 类型: '群', 号码: '123456', 会话: 'session-X' },
+      { 类型: '群', 号码: '654321', 会话: 'session-Y', 读取间隔分: 15, 读取最多条: 20, 点名必回: false },
+    ] } }, false]
+  const 渲频率 = () => { 下标 = 0; return 组件({ page: '群聊频率' }) }
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/save')) 保存频率配置 = JSON.parse(options.body)
+    return { json: async () => ({ ...初始态, 配置: 保存频率配置 || 状态槽[0].配置 }) }
+  }
+  const 规则卡片 = tree => 找控件(tree, n => n.t === 'section' && /的频率规则$/.test(n.p['aria-label'] || ''))
+  const 数框 = () => 找控件(规则卡片(渲频率())[0], n => n.t === 'input' && n.p.type === 'number')
+  const 群选择 = () => 找控件(渲频率(), n => n.t === 'select' && n.p['aria-label'] === '选择群聊')[0]
+  const 间隔开关 = () => 找控件(渲频率(), n => / 启用读取间隔$/.test(n.p['aria-label'] || ''))[0]
+  const 字段集 = () => 找控件(渲频率(), n => n.t === 'fieldset')[0]
+  报('默认可以选择群聊，一次显示一套独立规则', !群选择().p.disabled && 群选择().p.value === '123456' && 规则卡片(渲频率()).length === 1)
+  报('删除统一配置和频率页的门槛开关卡片', !可见文(渲频率()).includes('按群单独配置') && !可见文(渲频率()).includes('所有群聊') && !找控件(渲频率(), n => /启用回复门槛/.test(n.p['aria-label'] || '') || n.p.id === 'qq-reply-threshold').length)
+  报('读取间隔默认启用，参数可编辑', 间隔开关().p.checked && !字段集().p.disabled)
+  间隔开关().p.onChange({ target: { checked: false } })
+  报('关闭读取间隔后全部参数置灰', 字段集().p.disabled && 字段集().p.style.opacity < 1)
+  await 渲频率().p.onBlurCapture()
+  报('读取间隔开关保存到当前群', 保存频率配置?.绑定[0].启用读取间隔 === false && 保存频率配置?.绑定[1].读取间隔分 === 15)
+  群选择().p.onChange({ target: { value: '654321' } })
+  报('切换群聊显示独立参数和开关', 数框()[0].p.value === '15' && 数框()[1].p.value === '20' && !字段集().p.disabled)
+  数框()[0].p.onChange({ target: { value: '7' } })
+  await 渲频率().p.onBlurCapture()
+  报('单群修改不覆盖其他群', 保存频率配置?.绑定[1].读取间隔分 === 7 && 保存频率配置?.绑定[0].启用读取间隔 === false)
+  状态槽 = [{ ...初始态, 配置: { 绑定: [] } }, false]
+  报('没有群映射时下拉框禁用并显示添加提示', 群选择().p.disabled && 可见文(渲频率()).includes('暂无群聊映射'))
+} finally { globalThis.fetch = 频率原fetch }
 
 console.log(`\n${挂了 === 0 ? '全部通过 ✅' : `有 ${挂了} 条没过 ❌`}`)
 process.exitCode = 挂了 === 0 ? 0 : 1

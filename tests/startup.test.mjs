@@ -35,7 +35,7 @@ async function fixture(patch = {}) {
     const req = Readable.from([JSON.stringify(body)]); Object.assign(req, { method: 'POST', url: '/dsh-qq-bridge/' + action, headers: {} })
     let value; await routes.get(req.url)(req, { setHeader() {}, end(text) { value = JSON.parse(text) } }); return value
   }
-  return { initial, ctx, api, agents, requests, bridge, call, read: () => JSON.parse(readFileSync(path, 'utf8')), write: data => writeFileSync(path, JSON.stringify(data)), close() {
+  return { home, initial, ctx, api, agents, requests, bridge, call, read: () => JSON.parse(readFileSync(path, 'utf8')), write: data => writeFileSync(path, JSON.stringify(data)), close() {
     effects.reverse().forEach(off => off()); globalThis.fetch = oldFetch
     if (prior === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = prior
     rmSync(home, { recursive: true, force: true })
@@ -132,8 +132,10 @@ test('坏地址、令牌、历史接口与全关群聊概率给出可执行提�
     f.api.denied = true; assert.match((await f.call('startup-check')).说, /401.*令牌/)
     f.api.denied = false; f.api.history = false; assert.match((await f.call('startup-check')).说, /无法读取 QQ 消息/)
     f.api.history = true
-    const result = await f.call('startup-check', { 回复概率: 0, 点名必回: false, 绑定: [{ 类型: '群', 号码: '654321', 会话: 'session-A', 开: true }] })
-    assert.match(result.说, /群聊频率与概率/)
+    const result = await f.call('startup-check', { 逐群读取: false, 群聊统一规则: { 回复概率: 0, 点名必回: false }, 绑定: [{ 类型: '群', 号码: '654321', 会话: 'session-A', 开: true }] })
+    assert.match(result.说, /群聊频率/)
+    const enabled = await f.call('startup-check', { 逐群读取: false, 回复概率: 0, 点名必回: false, 群聊统一规则: { 回复概率: 100, 点名必回: false }, 绑定: [{ 类型: '群', 号码: '654321', 会话: 'session-A', 开: true }] })
+    assert.doesNotMatch(enabled.说, /群聊频率/, '启动检查应使用统一规则，不误用旧全局概率')
     assert.match((await f.call('startup-check', { 绑定: [...f.initial.绑定, { 类型: '私聊', 号码: '', 会话: '', 开: true }] })).说, /补全已启用映射/)
   } finally { f.close() }
 })
@@ -155,5 +157,27 @@ test('启动检查管理接口沿用 DSH 鉴权', async () => {
     f.api.managementDenied = true
     assert.equal((await f.call('startup-check')).说, 'management_forbidden'); assert.equal(f.requests.length, 0)
     assert.equal(f.read().总开关, false)
+  } finally { f.close() }
+})
+
+
+test('仅鱼粮超限允许警示重开，跳过鱼粮仍保留其他启动校验', async () => {
+  const f = await fixture({ 工作区: 'selected' })
+  try {
+    f.ctx.workspaceRegistry.list = () => [{ id: 'selected', path: f.home }]
+    const { recordEmbeddingUsage } = await import('../modules/memory/lib/embedding-usage.mjs')
+    const workspace = '--' + f.home.replace(/\//g, '-').replace(/^-+/, '') + '--'
+    recordEmbeddingUsage(f.home, { id: 'usage', phase: 'start', at: Date.now(), workspace, sessionId: 'session-A', rate: 1 })
+    recordEmbeddingUsage(f.home, { id: 'usage', phase: 'finish', status: 'success', tokens: 10000 })
+    writeFileSync(join(f.home, 'big-fish-rice-thresholds.json'), JSON.stringify({ dailyLimit: 0.001, lowBalance: 0 }))
+    let r = await f.call('power', { 开: true })
+    assert.equal(r.ok, false); assert.equal(r.riceLimitOnly, true)
+    f.api.online = false
+    r = await f.call('power', { 开: true }); assert.equal(r.riceLimitOnly, false)
+    r = await f.call('power', { 开: true, 跳过鱼粮上限: true }); assert.equal(r.ok, false); assert.equal(f.read().总开关, false)
+    f.api.online = true
+    r = await f.call('power', { 开: true, 跳过鱼粮上限: true })
+    assert.equal(r.ok, true, r.说); assert.equal(f.read().总开关, true)
+    assert.equal((await f.call('startup-check')).ok, true)
   } finally { f.close() }
 })

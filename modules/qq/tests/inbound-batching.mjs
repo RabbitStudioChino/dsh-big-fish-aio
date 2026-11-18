@@ -19,8 +19,8 @@ async function fixture(options = {}) {
   let now = 2000000000000
   Date.now = () => now
   const key = options.group ? '群:456' : '私聊:123'
-  let config = { 总开关: true, 试运行: true, 收图: true, 合并窗口秒: 1, 群里听所有人: true,
-    绑定: [{ 类型: options.group ? '群' : '私聊', 号码: options.group ? '456' : '123', 会话: 'session-X', 门槛: Boolean(options.group) }],
+  let config = { 逐群读取: true, 总开关: true, 试运行: true, 收图: true, 合并窗口秒: 1, 群里听所有人: true,
+    绑定: [{ 类型: options.group ? '群' : '私聊', 号码: options.group ? '456' : '123', 会话: 'session-X', 读取间隔分: 0, 门槛: Boolean(options.group) }],
     NapCat: 'http://synthetic.invalid', ...options.config }
   const configure = patch => { config = { ...config, ...patch }; writeFileSync(join(home, 'qq-bridge-config.json'), JSON.stringify(config)) }
   configure({})
@@ -305,8 +305,8 @@ await check('group reply probability 100 keeps every batch', async f => {
   assert.equal(a.calls.length, 1)
 }, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 0, 回复概率: 100 } })
 
-// ⭐ 1.1.7：@ 它的批次也要过「两条之间至少隔 N 秒」的闸 —— 以前直接穿过去，等于没有冷却
-await check('@ 它的消息也受冷却约束：连来两条，第二条要等', async f => {
+// 点名必回开启时及时处理；关闭时在前面的概率和冷却测试中验证限制。
+await check('点名必回开启时第二条点名也跳过冷却', async f => {
   f.messages([f.message(1, { age: 2, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '一号' } }] })])
   const a = f.mount(); await a.tick(); await settle()
   const 第一条 = a.calls.length
@@ -314,8 +314,7 @@ await check('@ 它的消息也受冷却约束：连来两条，第二条要等',
     f.message(2, { age: 1, segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: '二号' } }] })])
   await a.tick(); await settle()
   assert.equal(第一条, 1)
-  assert.equal(a.calls.length, 1)        // 冷却中：第二条还没出去
-  assert.ok(f.fastTimers().length >= 1)  // 排着队，到点会再来
+  assert.equal(a.calls.length, 2)        // 显式点名及时处理
 }, { group: true, config: { 合并窗口秒: 0, 回复冷却秒: 30, 每分钟最多条: 99, 回复概率: 100, 群里听所有人: true } })
 
 // ⭐ 1.1.3：@ / 引用 的批次 —— 「点名必回」开着不掷骰子，关掉就照样掷
@@ -346,5 +345,88 @@ await check('persona stays out of the message when the switch is off', async f =
   assert.equal(a.calls.length, 1)
   assert.ok(!String(a.calls[0].content[0].text).includes('你是小满'))
 }, { config: { 合并窗口秒: 0, 回复冷却秒: 0, 人设开: false, 人设: '你是小满，说话很短。' } })
+
+const sampledBinding = (patch = {}) => ({ 类型: '群', 号码: '456', 会话: 'session-X', 门槛: true, ...patch })
+const finishSample = a => a.bridge.收到事件({ id: 'session-X' }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
+
+await check('default sampling sends only latest 30 in one batch and persists interval across reload', async f => {
+  const a = f.mount()
+  f.messages(Array.from({ length: 50 }, (_, i) => f.message(i + 1, { age: 50 - i })))
+  await a.tick()
+  assert.equal(a.calls.length, 1)
+  const text = a.calls[0].content[0].text
+  assert.ok(!text.includes('synthetic-20\n')); assert.match(text, /synthetic-21\n/); assert.match(text, /synthetic-50/)
+  assert.equal(f.state().已转.length, 30); assert.ok(f.state().采样['群:456'])
+  assert.equal(JSON.parse(f.requests.find(([url]) => url.endsWith('_msg_history'))[1].body).count, 30)
+  f.advance(600000); f.messages([f.message(51)])
+  await a.tick(); assert.equal(a.calls.length, 1, 'running turn cannot enqueue another sample')
+  finishSample(a); a.dispose()
+  const b = f.mount(); f.advance(-599000)
+  await b.tick(); assert.equal(b.calls.length, 0)
+  f.advance(599000); await b.tick(); assert.equal(b.calls.length, 1)
+}, { group: true, config: { 合并窗口秒: 0, 绑定: [sampledBinding()] } })
+
+for (const enabled of [true, false]) await check(`sampling named bypass ${enabled} and ordinary pending messages`, async f => {
+  const a = f.mount(); f.messages([f.message(1, { age: 2 })]); await a.tick()
+  assert.equal(a.calls.length, 0, 'probability zero consumes the first sample without inference')
+  f.advance(2000)
+  f.messages([f.message(2, { age: 1 }), f.message(3, { segments: [{ type: 'at', data: { qq: '10001' } }, { type: 'text', data: { text: 'named' } }] })])
+  await a.tick()
+  assert.equal(a.calls.length, enabled ? 1 : 0)
+  if (enabled) {
+    assert.match(a.calls[0].content[0].text, /named/)
+    assert.ok(!a.calls[0].content[0].text.includes('synthetic-2'))
+    assert.ok(!f.state().已转.includes(2)); finishSample(a)
+  }
+  f.advance(600000); await a.tick()
+  assert.equal(a.calls.length, enabled ? 1 : 0, 'probability zero rejects non-bypass batches')
+  assert.ok(f.state().已转.includes(2)); assert.ok(f.state().已转.includes(3))
+}, { group: true, config: { 回复概率: 0, 绑定: [sampledBinding({ 点名必回: enabled })] } })
+
+await check('sample failure retries without advancing interval or duplicating accepted messages', async f => {
+  const a = f.mount(); f.messages([f.message(1, { age: 2 })]); let failed = true
+  a.follow(async () => { if (failed) throw Error('synthetic rejection') })
+  await a.tick(); assert.equal(f.state().采样, undefined)
+  failed = false; await a.tick(); assert.equal(a.calls.length, 2)
+  finishSample(a); await a.tick(); assert.equal(a.calls.length, 2)
+}, { group: true, config: { 绑定: [sampledBinding()] } })
+
+await check('different groups apply independent limits and probabilities', async f => {
+  f.fetch(async (url, options) => {
+    if (!url.endsWith('_msg_history')) return f.defaultFetch(url)
+    const group = JSON.parse(options.body).group_id
+    return response({ messages: [f.message(group * 10 + 1, { age: 2 }), f.message(group * 10 + 2, { age: 1 })] })
+  })
+  f.save({ 上次: { '群:456': 1999999900, '群:789': 1999999900 }, 已转: [] })
+  const a = f.mount(); await a.tick()
+  assert.equal(a.calls.length, 1); assert.equal(a.calls[0].source.chatId, '456')
+  assert.ok(!a.calls[0].content[0].text.includes('synthetic-4561')); assert.match(a.calls[0].content[0].text, /synthetic-4562/)
+  assert.ok(f.state().采样['群:456']); assert.ok(f.state().采样['群:789'])
+}, { group: true, config: { 绑定: [sampledBinding({ 读取最多条: 1 }), sampledBinding({ 号码: '789', 会话: 'session-Y', 读取间隔分: 15, 回复概率: 0 })] } })
+
+for (const older of [false, true]) await check(`latest reply is plain, older target quoted: ${older}`, async f => {
+  const a = f.mount(); f.messages([f.message(10, { age: 2 }), f.message(11, { age: 1 })]); await a.tick()
+  a.bridge.收到事件({ id: 'session-X' }, { type: 'turn/start', data: { turn: 1 } })
+  a.bridge.收到事件({ id: 'session-X' }, { type: 'user/message', data: a.calls[0] })
+  const target = a.tools.find(tool => tool.name === 'qq_reply_target')
+  assert.ok(target)
+  assert.equal((await target.execute({ message_id: '999999' })).ok, false)
+  if (older) assert.equal((await target.execute({ message_id: '10' })).ok, true)
+  a.bridge.收到事件({ id: 'session-X' }, { type: 'assistant/message', data: { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'first\n\nsecond' }] } } })
+  finishSample(a); await settle()
+  if (f.fastTimers().length) { await f.fireFast(); await settle() }
+  const sent = f.requests.filter(([url]) => url.endsWith('/send_group_msg')).map(([, options]) => JSON.parse(options.body))
+  assert.equal(sent.length, 2)
+  if (older) { assert.equal(sent[0].message[0].type, 'reply'); assert.equal(sent[0].message[0].data.id, '10') }
+  else assert.ok(!sent[0].message.some(x => x.type === 'reply'))
+  assert.ok(!sent[1].message.some(x => x.type === 'reply'))
+}, { group: true, config: { 试运行: false, 转群: true, 发图: false, 拆段间隔毫秒: 0, 绑定: [sampledBinding()] } })
+
+await check('disabled interval bypasses sampling and probability without erasing stored values', async f => {
+  const a = f.mount(); f.messages([f.message(1, { age: 2 })]); await a.tick()
+  assert.equal(a.calls.length, 1)
+  f.messages([f.message(2, { age: 1 })]); await a.tick()
+  assert.equal(a.calls.length, 2)
+}, { group: true, config: { 合并窗口秒: 0, 绑定: [sampledBinding({ 启用读取间隔: false, 读取间隔分: 10, 回复概率: 0, 点名必回: false, 回复冷却秒: 300, 每分钟最多条: 1 })] } })
 
 process.exitCode = failures ? 1 : 0

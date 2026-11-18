@@ -26,9 +26,11 @@ import { createMediaStorage } from './media-storage.mjs'
 import { createWorkspaceBinding } from './workspace.mjs'
 import { 搭话拦截原因 } from '../../speak/lib/host.js'
 import { createSessionTools } from './session-tools.mjs'
+import { groupRules, effectiveGroupRules, groupSample } from './group-rules.mjs'
 import { recoverResponse, messageProblem, responseProblem } from './response-guard.mjs'
 import { loadHostDeps } from '../../memory/lib/hostdeps.mjs'
-import { createRiceThresholds, reachedThreshold } from '../../../lib/rice-thresholds.mjs'
+import { deepseekBalance } from '../../../lib/deepseek-balance.mjs'
+import { createRiceThresholds } from '../../../lib/rice-thresholds.mjs'
 import { riceApi } from '../../../lib/rice-api.mjs'
 import { managementRejection } from '../../../lib/management-auth.mjs'
 import { describeFeatures, QQ_FEATURES, STICKER_FEATURES, readRiceFeatures } from '../../../lib/skill-features.mjs'
@@ -422,6 +424,7 @@ function 规整绑定(raw, 混, 字, 布, 显式绑定 = Array.isArray(raw)) {
     const 称呼 = (字(x && x.称呼) || (类型 === '群' ? '群里的人' : '对方')).slice(0, 16)
     // 保留歧义，让收发与保存入口明确拒绝，不能静默选中其中一条。
     return {
+      ...(类型 === '群' ? groupRules(x, 混) : {}),
       类型, 号码, 会话, 称呼, 门槛: 布(x && x.门槛, false), 主人QQ: x?.主人QQ === true, 沙箱环境: x?.沙箱环境 === true,
       // ⭐ 1.1.0：这一条聊天可以有自己的「人设」（空 = 用上面那个总的人设）
       // ⭐ 1.4.3：不再截到 2000 字 —— 以前超出的部分被**静默**截掉，用户不知道后半截没生效。
@@ -452,7 +455,7 @@ function 规整绑定(raw, 混, 字, 布, 显式绑定 = Array.isArray(raw)) {
     const 群会话 = 字(混.群会话)
     const 群号2 = 字(混.群号)
     if (私会话 && 私号) 出.push({ 类型: '私聊', 号码: 私号, 会话: 私会话, 称呼: (字(混.称呼) || '对方').slice(0, 16), 门槛: false, 沙箱环境: false })
-    if (群会话 && 群号2) 出.push({ 类型: '群', 号码: 群号2, 会话: 群会话, 称呼: (字(混.群称呼) || '群里的人').slice(0, 16), 门槛: false, 沙箱环境: false })
+    if (群会话 && 群号2) 出.push({ ...groupRules({}, 混), 类型: '群', 号码: 群号2, 会话: 群会话, 称呼: (字(混.群称呼) || '群里的人').slice(0, 16), 门槛: false, 沙箱环境: false })
   }
   return 出
 }
@@ -467,7 +470,9 @@ export function 归一化(原始) {
     return Math.max(低, Math.min(n, 高))
   }
   const 显式绑定 = Boolean(原始 && typeof 原始 === 'object' && Object.prototype.hasOwnProperty.call(原始, '绑定'))
-  const 绑定 = 规整绑定(混.绑定, 混, 字, 布, 显式绑定)
+  const 迁移绑定 = 混.逐群读取 === false && 混.群聊统一规则 && Array.isArray(混.绑定)
+    ? 混.绑定.map(row => row?.类型 === '群' ? { ...row, ...groupRules(混.群聊统一规则, 混), 门槛: 混.群聊统一规则.门槛 === true } : row) : 混.绑定
+  const 绑定 = 规整绑定(迁移绑定, 混, 字, 布, 显式绑定)
   const 主人标记 = Array.isArray(混.绑定) ? 混.绑定.filter(row => row?.主人QQ === true) : []
   if (主人标记.length && (主人标记.length !== 1 || !ownerQQ({ 绑定 }))) throw new Error('主人 QQ 必须是唯一、完整且无重复的私聊映射，只能勾选一个 QQ 号')
   // 老配置迁移：以前是「总开关」带动全部，现在按行走 —— 总开关开过的话，把群那几行补上
@@ -754,7 +759,7 @@ export function readSkillFeatures(sid) {
   const values = { ...c,
     当前会话绑定: Boolean(binding), 当前会话开启: Boolean(binding && binding.开 !== false),
     当前会话只听点名: binding?.类型 === '群' ? binding.只听点名 ?? !c.群里听所有人 : false,
-    当前会话门槛: binding?.门槛 === true, 当前会话沙箱: binding?.沙箱环境 === true,
+    当前会话门槛: binding?.类型 === '群' && effectiveGroupRules(binding, c).门槛, 当前会话沙箱: binding?.沙箱环境 === true,
     当前会话独立人设: Boolean(binding?.人设),
     转写命令已配置: Boolean(c.转写命令),
     已开启空间定时数量: c.空间定时发.filter(item => item.开).length,
@@ -1272,6 +1277,12 @@ export function apply(ctx) {
   const 已发轮 = new Set() // 「会话键:轮号」
   // ⭐ 0.6.0：每个「聊天」各自记「看到哪儿了」（键 = 类型:号码）—— 多群多私聊才不会互相串
   const 上次时间 = new Map() // 水位必须先初始化，再恢复磁盘状态
+  const 群采样时间 = new Map()
+  const 群待完成 = new Set()
+  const 群引用候选 = new Map() // DSH 消息 ID -> 本批真实 QQ 消息 ID 与绑定来源
+  const 本轮引用 = new Map()
+  // shortcut: 仅保留本次运行最近300条已读ID，需跨重载引用时再持久化。
+  const 群可引用记录 = new Map()
   const 已转消息 = new Set() // 已经转发进 DSH 的 QQ 消息 id（防重复转）
   // ⭐ 1.4.7：每条消息「本机第一次看到它」的时间（秒）—— 攒条窗口按它算，
   //   这样既不依赖 QQ 服务器的时间戳，也不会因为每一跳重读同一批而把窗口无限延长。
@@ -1285,6 +1296,7 @@ export function apply(ctx) {
     try {
       const j = JSON.parse(readFileSync(状态文件, 'utf8'))
       if (j && j.上次 && typeof j.上次 === 'object') for (const [k, v] of Object.entries(j.上次)) 上次时间.set(String(k), Number(v) || 0)
+      if (j?.采样) for (const [k, v] of Object.entries(j.采样)) 群采样时间.set(k, Number(v) || 0)
       if (j && Array.isArray(j.已转)) for (const id of j.已转.slice(-300)) 已转消息.add(id)
     } catch (error) { /* 没有就算了，第一次跑 */ }
   }
@@ -1295,6 +1307,10 @@ export function apply(ctx) {
       let 盘 = {}
       try { 盘 = JSON.parse(readFileSync(状态文件, 'utf8')) || {} } catch (error) {}
       const 上次 = { ...(盘.上次 || {}) }
+      const 采样 = { ...(盘.采样 || {}) }
+      const 合并采样 = (键, 值) => { 采样[键] = Math.max(Number(采样[键]) || 0, 值) }
+      if (成功?.采样) 合并采样(成功.键, 成功.采样)
+      else if (!成功) for (const [键, 值] of 群采样时间) 合并采样(键, 值)
       const 合并时间 = (键, 值) => { 上次[键] = Math.max(Number(上次[键]) || 0, Number(值) || 0) }
       if (成功) 合并时间(成功.键, 成功.时间)
       else for (const [键, 值] of 上次时间) 合并时间(键, 值)
@@ -1302,7 +1318,7 @@ export function apply(ctx) {
       // 正常收尾以磁盘最近的成功记录为准；迟到成功只追加自己的这批消息 id。
       const 全已转 = 成功 ? [...盘已转, ...成功.ids] : [...已转消息, ...盘已转]
       writeFileSync(状态文件, JSON.stringify({
-        上次, 已转: [...new Set(全已转)].slice(-300),
+        上次, 已转: [...new Set(全已转)].slice(-300), ...(Object.keys(采样).length ? { 采样 } : {}),
       }, null, 2), 'utf8')
     } catch (error) { /* 存不下不影响转消息 */ }
   }
@@ -1442,7 +1458,7 @@ export function apply(ctx) {
   }
 
   /** 把一句正文发到该发的地方（私聊 / 群）；按空行拆段，一段一条连发。⭐ 末尾再加上图片。 */
-  async function 发到QQ(配置, 原文字, 图们, 方向 = '', 附加表情 = [], 发送检查 = () => '') {
+  async function 发到QQ(配置, 原文字, 图们, 方向 = '', 附加表情 = [], 发送检查 = () => '', 引用 = null) {
     const 发送 = (...args) => {
       const 原因 = 发送检查()
       if (原因) return { action: args[1], ok: false, 数据: { 错: '主动搭话已停止：' + 原因 } }
@@ -1626,7 +1642,8 @@ export function apply(ctx) {
         const 允许全体 = 配置.能艾特全体 === true
         for (let i = 0; i < 段们.length; i++) {
           const 段们2 = 拆成消息段(段们[i], { 允许全体, 按名字: 认名字 })
-          const 体 = { group_id: Number(行.号码), message: 段们2 }
+          const 可引用 = i === 0 && 引用?.id && 引用?.群号 === 行.号码 && 引用.端点 === endpointKey(配置)
+          const 体 = { group_id: Number(行.号码), message: 可引用 ? [{ type: 'reply', data: { id: 引用.id } }, ...段们2] : 段们2 }
           出.push(await 发送(配置.NapCat, 'send_group_msg', 体, 配置))
           if (i < 段们.length - 1) await new Promise((r) => setTimeout(r, 发段延迟))
         }
@@ -1676,7 +1693,7 @@ export function apply(ctx) {
   }
 
   /** 一轮真正落地：总开关 / 试运行 在这儿把关。 */
-  async function 落地一发(配置, 文字, 图们, 方向 = '', 是QQ唤醒 = false, 是本地手打 = false, 来源 = '', 手动搭话 = false) {
+  async function 落地一发(配置, 文字, 图们, 方向 = '', 是QQ唤醒 = false, 是本地手打 = false, 来源 = '', 手动搭话 = false, 引用 = null) {
     if (已发轮.size > 300) 已发轮.clear() // 防 Set 无限长
     // ⭐ 0.6.0：方向就是「哪一间会话」—— 下面按它去绑定里反查该发到哪个聊天
     const 这份会话 = String(方向 || '')
@@ -1733,7 +1750,7 @@ export function apply(ctx) {
     const 发送检查 = () => 来源 === 'speak-up' ? 搭话拦截原因(ctx, 方向, undefined, new Date(), 手动搭话) : ''
     const 原因 = 发送检查()
     if (原因) return 记账('主动搭话已停止：' + 原因)
-    const 结果 = await 发到QQ(最新配置, 待发文字, 图们, 方向, 最新配置.发图 ? 自动表情 : [], 发送检查)
+    const 结果 = await 发到QQ(最新配置, 待发文字, 图们, 方向, 最新配置.发图 ? 自动表情 : [], 发送检查, 引用)
     const 全过 = 结果.length > 0 && 结果.every((r) => r.ok)
     if (结果.length === 0) {
       记账('这一边（' + (方向 || '私聊+群') + '）没开或没填号，或者这轮既没有文字也没有图（而且图都没转成）：没地方发')
@@ -1763,6 +1780,7 @@ export function apply(ctx) {
     //   （宿主被杀、会话被换掉、插件在这一轮里被卸载重载），
     //   否则标记会一直挂着，把这个会话接下来的回复全吞掉（表现是「它明明回了，群里却没有」）。
     if (event && event.type === 'turn/start') {
+      本轮引用.delete(键)
       静默轮.delete(键)
       异常轮.delete(键)
       记上一轮(空轮())
@@ -1810,13 +1828,21 @@ export function apply(ctx) {
       //   `user` → `runtime-context` → `time-context`），后者把她标成「不是她打的」，
       //   再配上「自动触发也发」开着 ⇒ **她在窗口里自己聊的话被推到了 QQ**。
       //   话头只有一个，就是先开口的那个；搭车的注入没有资格改它。
-      if (类 === 'qq') 本轮有QQ.set(键, true)
+      if (类 === 'qq') {
+        本轮有QQ.set(键, true)
+        const id = event.data?.id || event.data?.message?.id
+        const 引用 = 群引用候选.get(id)
+        if (引用) { 本轮引用.set(键, 引用); 群引用候选.delete(id) }
+      }
       if (!轮来源.has(键) && !是搭车注入(类)) 轮来源.set(键, { kind: 类 || 'user', manual: 源?.manual === true })
       return
     }
 
     if (event && event.type === 'turn/end') {
       const d = event.data || {}
+      群待完成.delete(键)
+      const 引用 = 本轮引用.get(键)
+      本轮引用.delete(键)
       const 完成 = !!(d.reason && d.reason.kind === 'completed')
       // ⭐ 1.4.8（issue #27）：静默标记只对**触发它的那一轮**有效，这一轮一结束就作废。
       //   以前只在「这一轮真的说完了话」那条路上清，下面两种情况都清不掉：
@@ -1859,7 +1885,7 @@ export function apply(ctx) {
         if (这轮静默) {
           记账('回复门槛：这一轮按判定跳过发送（' + 短id(键) + '）')
         } else {
-          void 落地一发(配置, 上一轮.文本, 上一轮.图们, 方向, 是QQ唤醒, 是本地手打, 来源, 来源信息?.manual === true)
+          void 落地一发(配置, 上一轮.文本, 上一轮.图们, 方向, 是QQ唤醒, 是本地手打, 来源, 来源信息?.manual === true, 引用)
         }
       }
       记上一轮(空轮())
@@ -2559,14 +2585,7 @@ export function apply(ctx) {
   })
 
   // 只读检查：不发 QQ 消息，不触发模型生成，也不修改当前配置。
-  const 检查启动 = async (配置, 原始 = 配置) => {
-    try {
-      const { dailyLimit } = 鱼粮阈值.settings()
-      if (dailyLimit) {
-        const report = 读取鱼粮用量(配置)
-        if (reachedThreshold(report.days.find(d => d.date === report.今天)?.cost || 0, dailyLimit)) return { ok: false, 说: '今日鱼粮已达上限，请调整阈值或次日再开启' }
-      }
-    } catch (error) { return { ok: false, 说: error.message } }
+  const 检查启动 = async (配置, 原始 = 配置, 跳过鱼粮 = false) => {
     const 问题 = [], 加问题 = text => 问题.push(text)
     if (!ownerQQ(配置)) 加问题('绑定 → 私聊映射：必须勾选唯一的「主人 QQ」，并补全 QQ 号和目标会话。')
     if (配置.试运行) 加问题('连接 → 基础策略与通知：关闭「试运行」，否则回复不会发送到 QQ。')
@@ -2583,7 +2602,7 @@ export function apply(ctx) {
       try { bindingSource(目录, b) } catch (error) { 加问题(label + '：' + error.message) }
     }
     const 群们 = 绑定.filter(b => b.类型 === '群')
-    if (群们.length && 配置.回复概率 === 0 && !配置.点名必回) 加问题('消息策略 → 群聊频率与概率：回复概率不能为 0 且同时关闭「点名必回」，请调整其中一项。')
+    if (群们.length && 群们.every(b => { const rule = effectiveGroupRules(b, 配置); return rule.回复概率 === 0 && !rule.点名必回 })) 加问题('群聊频率：所有群的回复概率均为 0 且关闭「点名必回复」，请调整规则。')
 
     let 登录 = null, 地址有效 = false
     try { const url = new URL(配置.NapCat); 地址有效 = ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash } catch {}
@@ -2632,8 +2651,14 @@ export function apply(ctx) {
       const provider = agent.options?.provider || header?.provider, model = agent.options?.model || header?.model
       if (!provider || !model || typeof llm?.stream !== 'function' || (providers && !providers.has(provider))) 加问题(label + '：请在目标 DSH 会话中选择已配置的模型和服务商。')
     }
+    let riceLimitOnly = false
+    if (!跳过鱼粮) {
+      try {
+        if (鱼粮阈值.budget(配置).exceeded) { riceLimitOnly = !问题.length; 加问题('今日鱼粮已达上限，可选择重新开启继续运行。') }
+      } catch (error) { 加问题(error.message) }
+    }
     const 列表 = [...new Set(问题)]
-    return { ok: !列表.length, 问题: 列表, ...(登录 ? { 用户: 登录.user_id, 昵称: 登录.nickname } : {}), 说: 列表.length ? '大肥鱼暂时无法启动，请先完成：\n' + 列表.map((x, i) => (i + 1) + '. ' + x).join('\n') : '启动检查已通过，请保存设置后启动大肥鱼。' }
+    return { ok: !列表.length, riceLimitOnly, 问题: 列表, ...(登录 ? { 用户: 登录.user_id, 昵称: 登录.nickname } : {}), 说: 列表.length ? '大肥鱼暂时无法启动，请先完成：\n' + 列表.map((x, i) => (i + 1) + '. ' + x).join('\n') : '启动检查已通过，请保存设置后启动大肥鱼。' }
   }
   路线(`${路由前缀}/startup-check`, async (req, res) => {
     const 原始 = { ...读配置(), ...await 读体(req) }
@@ -2709,7 +2734,7 @@ export function apply(ctx) {
     const 候选 = { ...现在, ...((来 && 来.配置) || {}), 总开关: 开 }
     const 洗好 = 归一化(候选)
     if (开 && (!现在.总开关 || !ownerQQ(洗好))) {
-      const 检查 = await 检查启动(洗好, 候选)
+      const 检查 = await 检查启动(洗好, 候选, 来.跳过鱼粮上限 === true)
       if (!检查.ok) return 回(res, { ...检查, 启动检查失败: true })
       if (JSON.stringify(读配置()) !== JSON.stringify(现在)) return 回(res, { ok: false, 说: '检查期间设置已变化，请重新开启' })
     }
@@ -2718,6 +2743,7 @@ export function apply(ctx) {
       if ((洗好.绑定 || []).some(b => !exclusiveBinding(洗好.绑定.map(x => ({ ...x, 开: true })), b.会话))) return 回(res, { ok: false, 说: '每个聊天必须使用独立 DSH 会话，不能重复绑定聊天或会话' })
       try { for (const row of 洗好.绑定 || []) bindingSource(目录, row) } catch (error) { return 回(res, { ok: false, 说: error.message }) }
     }
+    if (开 && 来.跳过鱼粮上限 === true) 鱼粮阈值.resume(洗好)
     if (!写配置(洗好)) return 回(res, { ok: false, 说: `写不进配置文件：${配置文件}` })
     刷新轮询配置(洗好)
     if (开) {
@@ -2935,10 +2961,11 @@ export function apply(ctx) {
     return '【' + 头 + '】' + String.fromCharCode(10) + 净 + 尾注
   }
 
-  async function 转入一条(文字, 图们, 消息id, 行, 发送者, 点名, 收消息信号, 已受理, 来源指定 = '', 可信发送者 = null, 文件接收 = null) {
+  async function 转入一条(文字, 图们, 消息id, 行, 发送者, 点名, 收消息信号, 已受理, 来源指定 = '', 可信发送者 = null, 文件接收 = null, 引用ids = []) {
     const 配置 = 读配置()
     // ⭐ 2026-10-25（0.6.0）：传「绑定行」进来 —— 每一行自带类型 / 号码 / 会话 / 称呼
-    const 这条 = 行 || (配置.绑定 || [])[0] || null
+    const 原绑定 = 行 || (配置.绑定 || [])[0] || null
+    const 这条 = 原绑定?.类型 === '群' ? { ...原绑定, ...effectiveGroupRules(原绑定, 配置) } : 原绑定
     const 这间 = String((这条 && 这条.会话) || 配置.私聊会话 || '')
     if (!这间) return { ok: false, 说: '还没绑任何聊天（私聊或群）' }
     if (!配置.总开关) return { ok: false, 说: '总开关关着，先打开' }
@@ -3054,7 +3081,7 @@ export function apply(ctx) {
       : ''
     // ⚠ 1.1.1（她定的）：人设**只走系统提示词**，不塞进消息里 —— 塞进来会留在对话历史里堆着，
     //   而且只对 QQ 这半边生效，自己打字时又是另一个样子。挂不上就不带（备人设 里会记一句）。
-    const 文案 = 基础 + 门槛提示 + 块提示
+    const 文案 = 基础 + 门槛提示 + 块提示 + (这条?.类型 === '群' ? '\n回复本批最新消息时直接回复，不用引用。回应较早话题时，先调用 qq_reply_target，传入该话题对应原消息的 QQ消息ID，再正常回复；不要引用最新消息。' : '')
 
     let content = [{ type: 'text', text: 文案 }, ...文件结果.content]
     if (收下.length) {
@@ -3086,6 +3113,16 @@ export function apply(ctx) {
       //   catch 根本看不到（try 早就退出了）⇒ 未处理的 rejection ⇒ **整个 DSH 宿主退出**
       //   （2026-10-21：speak-up 同一个坑已经被用户报成"装了鱼就死了"，这里一并修）
       if (收消息信号?.aborted || !读配置().总开关) return { ok: false, 说: '收消息已停止' }
+      if (这条.类型 === '群' && /^-?\d+$/.test(String(消息id))) {
+        const 键 = 会话键(这间), 端点 = endpointKey(配置)
+        const 旧 = 群可引用记录.get(键)
+        const ids = [...new Set([...(旧?.群号 === 这条.号码 && 旧.端点 === 端点 ? 旧.ids : []), ...引用ids.map(String), String(消息id)])].filter(x => /^-?\d+$/.test(x)).slice(-300)
+        const 引用 = { id: '', 最新: String(消息id), ids, 群号: 这条.号码, 端点 }
+        群可引用记录.set(键, 引用)
+        群引用候选.set(id, { ...引用 })
+        if (群引用候选.size > 300) 群引用候选.delete(群引用候选.keys().next().value)
+      }
+      if (这条.类型 === '群' && 这条.读取间隔分 > 0) 群待完成.add(会话键(这间))
       await agent.followup({ id, role: 'user', content, source })
       已受理?.() // 先记宿主受理，不让后面的 flush 或卸载延迟去重落盘
       if (收消息信号?.aborted) return { ok: true, 说: '转入后收消息已停止' }
@@ -3102,6 +3139,8 @@ export function apply(ctx) {
       记账(`收到 QQ 里的${收下.length ? '图片' : '话'}${图话} → 转进 DSH：「${(原话 || '（没配字）').slice(0, 50)}${原话.length > 50 ? '…' : ''}」`)
       return { ok: true, 说: '转进去了，它会照常开一轮' }
     } catch (error) {
+      群引用候选.delete(id)
+      群待完成.delete(会话键(这间))
       return { ok: false, 说: `followup 失败：${String((error && error.message) || error)}` }
     }
   }
@@ -3167,7 +3206,7 @@ export function apply(ctx) {
   //   · **隔多久**：上一次开口之后，最少隔这么多秒才允许再开口；
   //   · **一分钟最多几条**：一分钟里最多送进去几条；撞上了这批就先等着，
   //     等窗口里最早那条滑出去再送（**等，不是丢** —— 说的话不能白说）。
-  //   点数名的（@ 你 / 引用你）不看这两个数 —— 那是冲你来的。
+  //   点名必回开启时，点名消息跳过这两个限制。
   const 群发时间 = new Map()   // 键（类型:号码）-> [毫秒时间戳]（最近 1 分钟）
   const 群上次送 = new Map()   // 键 -> 毫秒时间戳
   const 一分钟 = 60 * 1000
@@ -3320,7 +3359,7 @@ export function apply(ctx) {
       const 配置 = 读配置()
       const 这行 = (配置.绑定 || []).find((b) => 会话键(b.会话) === sid) || null
       // ⭐ 0.9.9：门槛**只对群有效**。私聊一行根本没有门槛开关，调了也一律放行。
-      if (!这行 || !这行.门槛 || 这行.类型 !== '群') {
+      if (!这行 || 这行.类型 !== '群' || !effectiveGroupRules(这行, 配置).门槛) {
         唤醒时间.delete(sid)
         return { ok: true, 说: '这个聊天没开门槛（门槛只对群有效），正常回就行。' }
       }
@@ -3379,15 +3418,42 @@ export function apply(ctx) {
     },
   })
 
+  const 引用工具挂着 = new Map()
+  ctx.effect(() => () => { for (const { off } of 引用工具挂着.values()) off?.() })
+  function 同步引用工具(配置) {
+    const 活跃 = new Set()
+    for (const row of 配置.绑定.filter(b => b.类型 === '群' && b.开 !== false)) {
+      const sid = 会话键(row.会话), agent = 找agent(row.会话)
+      活跃.add(sid)
+      const old = 引用工具挂着.get(sid)
+      if (!agent?.ctx?.tools?.register || old?.agent === agent) continue
+      old?.off?.()
+      const off = agent.ctx.tools.register({
+        name: 'qq_reply_target', description: '回应较早群聊话题时，选择该原消息的 QQ消息ID。回应本批最新消息不需要调用，不加引用。只接受本群已读取的真实消息ID。',
+        parameters: { type: 'object', properties: { message_id: { type: 'string' } }, required: ['message_id'], additionalProperties: false },
+        output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+        execute({ message_id }) {
+          const current = 读配置(), binding = exclusiveBinding(current.绑定, sid), ref = 本轮引用.get(sid)
+          if (!current.总开关 || !binding || binding.类型 !== '群' || !ref || ref.群号 !== binding.号码 || ref.端点 !== endpointKey(current) || !ref.ids.includes(message_id)) return { ok: false, 说: '只能引用本群已读取的原消息。' }
+          ref.id = message_id === ref.最新 ? '' : message_id
+          return { ok: true, 说: ref.id ? '已选择该原消息，正常输出回复即可。' : '最新消息直接回复，不添加引用。' }
+        },
+      })
+      引用工具挂着.set(sid, { agent, off })
+    }
+    for (const [sid, entry] of 引用工具挂着) if (!活跃.has(sid)) { entry.off?.(); 引用工具挂着.delete(sid) }
+  }
+
   /** 每一小跳：门槛开着就给「绑了 QQ 的那几间屋」挂上这个工具，关掉就卸下来 */
   function 闸门心跳() {
     try {
       const 配置 = 读配置()
+      同步引用工具(配置)
       const 该挂 = new Set()
-      // ⭐ 只认每一行自己的门槛（0.8.2 去掉了那个让人犯晕的总开关）
+      // 按当前统一或单群规则决定哪些会话挂门槛工具。
       for (const 行 of (配置.绑定 || [])) {
         if (行.类型 !== '群') continue     // 私聊不判（自己私聊本来就是在跟它说话）
-        if (!行.门槛) continue
+        if (!effectiveGroupRules(行, 配置).门槛) continue
         const id = String(行.会话 || '').trim()
         if (id) 该挂.add(id)
       }
@@ -3954,20 +4020,14 @@ export function apply(ctx) {
       清补跑(); 当前控制?.abort()
       记账('每日鱼粮已达上限：已自动关闭大肥鱼总开关')
     },
-    async balance() {
-      const account = ctx.get('deepseekAccount')
-      if (!account?.getBalance) throw Error('宿主未提供 DeepSeek 余额服务')
-      const result = await account.getBalance({ version: JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).repositoryVersion, locale: 'zh-CN', timezoneOffsetSeconds: 28800 })
-      if (result?.status !== 'ready' || !Array.isArray(result.value)) throw Error('请检查 DeepSeek 登录状态和余额查询')
-      const wallets = [...result.value, ...(result.bonusWallets || [])].filter(w => w.currency === 'CNY')
-      if (!wallets.length || wallets.some(w => typeof w.balance !== 'string' || !w.balance.trim() || !Number.isFinite(Number(w.balance)))) throw Error('账户未返回有效人民币余额')
-      return wallets.reduce((sum, w) => sum + Number(w.balance), 0)
-    },
+    async balance() { return (await deepseekBalance(ctx)).balance },
     async send(c, owner, message) {
       const result = await 发一个(c.NapCat, 'send_private_msg', { user_id: Number(owner), message: [{ type: 'text', data: { text: message } }] }, c)
       if (!result.ok) throw Error(result.数据?.message || '主人私信发送失败')
     },
   })
+  路线(`${路由前缀}/rice-balance`, async (req, res) => 回(res, { ok: true, ...await deepseekBalance(ctx) }))
+  路线(`${路由前缀}/rice-alert`, async (req, res) => 回(res, { ok: true, alert: 鱼粮阈值.alert(), power: 读配置().总开关 }))
   路线(`${路由前缀}/rice`, async (req, res) => 回(res, { ...读取鱼粮用量(), thresholds: 鱼粮阈值.settings() }))
   路线(`${路由前缀}/rice-thresholds`, 手动操作(async (req, res) => {
     try {
@@ -4443,17 +4503,35 @@ export function apply(ctx) {
       // ⭐ 1.1.8：这一行被关掉了 —— 不收也不发，配置留着
       if (行.开 === false) continue
       const 是群 = 行.类型 === '群'
+      const 规则 = 是群 ? effectiveGroupRules(行, 配置) : null
+      const 定时采样 = 是群 && 规则.读取间隔分 > 0
+      const 键2 = 行.类型 + ':' + 行.号码
+      if (定时采样 && !规则.点名必回 && Date.now() - (群采样时间.get(键2) || 0) < 规则.读取间隔分 * 60000) continue
+      if (定时采样 && 群待完成.has(会话键(行.会话))) continue
       const 动作 = 是群 ? 'get_group_msg_history' : 'get_friend_msg_history'
       const 体 = 是群
-        ? { group_id: Number(行.号码), count: 30 }
+        ? { group_id: Number(行.号码), count: 定时采样 ? Math.max(规则.点名必回 ? 30 : 1, 规则.读取最多条) : 30 }
         : { user_id: Number(行.号码), count: 10 }
-      const 列表 = [...new Map([...(await 拉(动作, 体)), ...文件事件.messages(行, 已转消息)].map(m => [String(m.message_id), m])).values()]
+      let 列表 = [...new Map([...(await 拉(动作, 体)), ...文件事件.messages(行, 已转消息)].map(m => [String(m.message_id), m])).values()]
       if (信号.aborted) return
-      const 键2 = 行.类型 + ':' + 行.号码
       // ⚠️ 没记录过这个聊天（比如刚加绑定 / 第一次跑）时，从**此刻**开始算 ——
       //   否则历史消息会全被当成新的补投一遍。
       let 上次 = 上次时间.has(键2) ? (上次时间.get(键2) || 0) : Math.floor(Date.now() / 1000)
 
+      let 采样到点 = false
+      if (定时采样) {
+        const 我 = await 拿自己QQ(拉任意)
+        if (信号.aborted) return
+        const 新消息 = 列表.filter(条 => 条 && (条.time || 0) >= 上次 && !已转消息.has(条.message_id) && String(条.user_id) !== String(我))
+          .sort((a, b) => (a.time || 0) - (b.time || 0))
+        const 选择 = groupSample(新消息, 规则, 群采样时间.get(键2), Date.now(), 条 =>
+          识别点名(Array.isArray(条.message) ? 条.message : [], 我, 己方消息, String(配置.点名关键词 || '').split(/[\s,，、;；]+/)))
+        列表 = 选择.messages
+        采样到点 = 选择.due
+      }
+      const 记采样 = () => {
+        if (定时采样 && 采样到点) 群采样时间.set(键2, Date.now())
+      }
       // ⭐ 1.0.2：这一个聊天里「攒着还没转进去」的一批（同一个人连着发的）
       let 攒 = null
       const 是群行 = 行.类型 === '群'
@@ -4465,36 +4543,36 @@ export function apply(ctx) {
         const 现在秒 = Math.floor(Date.now() / 1000)
         const 最长 = Number(配置.合并最多秒) || 20
         const 差 = 现在秒 - (攒.末 || 0)
-        const 满了 = 攒.条目.length >= (Number(配置.合并最多条) || 8)
+        const 满了 = 攒.条目.length >= (Number(规则?.合并最多条 ?? 配置.合并最多条) || 8)
         // 差 < 0 说明是「未来的时间戳」（时钟歪了 / 老测试造的），别傻等
-        if (!满了 && 窗口 > 0 && 差 >= 0 && 差 < 窗口 && (现在秒 - 攒.起) < 最长) {
+        if (!定时采样 && !满了 && 窗口 > 0 && 差 >= 0 && 差 < 窗口 && (现在秒 - 攒.起) < 最长) {
           快跑一次(Math.max(300, Math.round(窗口 * 1000) + 200))
           return false      // 最后一条刚过去没多久 —— 再等等，下一跳连新的那条一起收
         }
         // ⭐ 1.0.9：先掷骰子 —— **没掷中就不送了**（这批根本不进 DSH，不占上下文、不花 token）
         // ⭐ 1.1.3：以前 @ / 引用 的批次**永远不掷骰子** —— 而默认「群里只听 @ 的」，
         //   于是概率这个数在实际使用里从来没生效过（填 50 也照回）。现在由「点名必回」决定。
-        const 掷骰子 = 是群行 && !(攒.点名 && 配置.点名必回 !== false)
+        const 掷骰子 = 是群行 && !(攒.点名 && 规则.点名必回 !== false)
         if (掷骰子) {
           if (!攒.掷过) {
             攒.掷过 = true
-            const 概率 = Math.max(0, Math.min(100, Number(配置.回复概率 == null ? 100 : 配置.回复概率)))
+            const 概率 = Math.max(0, Math.min(100, Number(规则.回复概率)))
             攒.中 = Math.random() * 100 < 概率
           }
           if (!攒.中) {
             const 丢 = 攒
             攒 = null
             for (const id of 丢.ids) 已转消息.add(id)
-            上次 = Math.max(上次, 丢.末时 || 丢.末 || 上次)
-            记账('群里这 ' + 丢.条目.length + ' 条没掷中（回复概率 ' + Number(配置.回复概率) + '%），这次不接')
+            if (!定时采样 || 采样到点) 上次 = Math.max(上次, 丢.末时 || 丢.末 || 上次)
+            记采样()
+            记账('群里这 ' + 丢.条目.length + ' 条没掷中（回复概率 ' + Number(规则.回复概率) + '%），这次不接')
             return true
           }
         }
         // ⭐ 1.0.9：群聊的节奏。
-        // ⭐ 1.1.7：**@ 它的也照样排队** —— 以前点名直接穿过去，群里一有人 @ 它，冷却和
-        //   「一分钟最多几条」就等于没有，看起来就是「没有冷却、刷屏」。现在只是晚几秒回，不会漏。
-        if (是群行) {
-          const 闸 = 群闸(键2, 配置)
+        // 点名必回开启时及时处理，否则与普通消息遵守同一套群规则。
+        if (是群行 && 规则.启用读取间隔 && !(攒.点名 && 规则.点名必回)) {
+          const 闸 = 群闸(键2, 规则)
           if (闸.等毫秒 > 0) {
             快跑一次(Math.min(3000, Math.max(300, Math.round(闸.等毫秒) + 200)))
             return false    // 还没到点 —— 这一批留着，别丢
@@ -4507,16 +4585,17 @@ export function apply(ctx) {
           const 名 = (是群行 && x.发送者)
             ? String(x.发送者.昵称 || '某人') + '（' + String(x.发送者.号码 || '?') + '）：'
             : ''
-          return 名 + String(x.文字 || '')
+          return (是群行 ? '[QQ消息ID:' + String(x.消息id) + '] ' : '') + 名 + String(x.文字 || '')
         }).filter((s) => s.trim()).join(String.fromCharCode(10))
         if (一批.ids.length > 1) 记账('连着发的 ' + 一批.ids.length + ' 条攒成一条转进去')
-        const 结果 = await 转入一条(文字, 一批.图们, 一批.ids[0], 行, 是群行 ? null : 一批.发送者, 一批.点名, 信号, () => {
+        const 结果 = await 转入一条(文字, 一批.图们, 一批.ids.at(-1), 行, 是群行 ? null : 一批.发送者, 一批.点名, 信号, () => {
           const 去重ids = [...一批.ids, ...一批.文件们.map(段 => 文件去重键(段, 行, 配置)).filter(Boolean)]
           for (const id of 去重ids) 已转消息.add(id)
-          上次 = Math.max(上次, 一批.末时 || 一批.末 || 上次)
-          存水位({ 键: 键2, 时间: 上次, ids: 去重ids })
+          if (!定时采样 || 采样到点) 上次 = Math.max(上次, 一批.末时 || 一批.末 || 上次)
+          记采样()
+          存水位({ 键: 键2, 时间: 上次, ids: 去重ids, 采样: 群采样时间.get(键2) })
           if (是群行) 记一发(键2)
-        }, '', 一批.条目.map(x => x.发送者?.号码), { files: 一批.文件们, call: 拉任意 })
+        }, '', 一批.条目.map(x => x.发送者?.号码), { files: 一批.文件们, call: 拉任意 }, 一批.ids)
         if (信号.aborted) return false
         if (结果 && 结果.ok) return true
         记账('这条先没转进去（' + 短id(行.会话) + '：' + String((结果 && 结果.说) || '原因不明') + '），下一跳再试')
@@ -4595,7 +4674,7 @@ export function apply(ctx) {
         // ⚠️ 2026-10-25：会话关着的时候攒下的旧消息，
         //    隔太久（默认 10 分钟）就别补投了 —— 否则她一点进那间屋，就会突然冒出一条「自动回复」。
         const 太旧 = (条.time || 0) > 0 && (Math.floor(Date.now() / 1000) - 条.time) > (Number(配置.补投窗口分) || 10) * 60
-        if (太旧) {
+        if (太旧 && !定时采样) {
           已转消息.add(条.message_id)
           上次 = Math.max(上次, 条.time || 0)
           记账('这条 QQ 消息已经是 ' + Math.round((Date.now() / 1000 - 条.time) / 60) + ' 分钟前的了，不再补投（怕一打开会话就冒出一条旧回复）—— 想看内容可以回 QQ 里翻聊天记录')
@@ -4654,12 +4733,12 @@ export function apply(ctx) {
             这行文字 = 头 + '：' + String(文字 || '')
           }
         }
-        攒.条目.push({ 文字: 这行文字, 发送者 })
+        攒.条目.push({ 文字: 这行文字, 发送者, 消息id: 条.message_id })
         if (图们.length) 攒.图们.push(...图们)
         if (文件们.length) 攒.文件们.push(...文件们.filter(段 => !攒.文件们.some(x => 文件去重键(x, 行, 配置) === 文件去重键(段, 行, 配置))).slice(0, Math.max(0, 11 - 攒.文件们.length)))
         攒.ids.push(条.message_id)
         攒.点名 = 攒.点名 || Boolean(点名)
-        if (!(Number(配置.合并窗口秒) > 0)) {
+        if (!定时采样 && !(Number(配置.合并窗口秒) > 0)) {
           const 好 = await 落袋()
           if (信号.aborted) return
           if (!好) break

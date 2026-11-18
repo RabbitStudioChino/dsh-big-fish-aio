@@ -60,6 +60,7 @@ test('十入口支持图标、键盘切换及已访问面板保留', () => {
   assert.equal(tree.find(n => n.props?.id === 'fish-panel-0').props.hidden, true)
   const submenu = tree.find(n => n.props?.['aria-label'] === 'QQ 互通子菜单')
   const entries = walk(submenu).filter(n => n.type === 'button').map(n => n.children.join(''))
+  assert.equal(entries.indexOf('群聊频率'), entries.indexOf('消息策略') + 1)
   assert.equal(entries.indexOf('语音转写'), entries.indexOf('表情包') + 1)
   assert.equal(entries.at(-1), '聊天记录')
   assert.equal(entries.indexOf('聊天记录'), entries.indexOf('图片与文件') + 1)

@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
       return s.length <= 8 ? s : s.slice(-8)
     }
 
-    const 页签们 = ['连接', '绑定', '消息策略', '角色设定', 'QQ 账号', 'QQ 空间', '表情包', '语音转写', '语音发送', '图片与文件', '聊天记录']
+    const 页签们 = ['连接', '绑定', '消息策略', '群聊频率', '角色设定', 'QQ 账号', 'QQ 空间', '表情包', '语音转写', '语音发送', '图片与文件', '聊天记录']
 
     function QQAccountState() {
       const [state, setState] = React.useState(null)
@@ -153,7 +153,7 @@ window.__ModuleLoader__.load({
         h('pre', { className: 'fish-feed-result', role: 'status' }, result || '选择操作后显示动态。'))
     }
 
-    function Section({ page, onPageChange, guard, notify, help, hideHelp, laterHideHelp, confirm, editRole, openRoleWriter, openFileManager, embedded = false } = {}) {
+    function Section({ page, onPageChange, guard, notify, help, hideHelp, laterHideHelp, confirm, confirmRice, editRole, openRoleWriter, openFileManager, embedded = false } = {}) {
       const [态, 设态] = React.useState(null)
       const [脏, 设脏] = React.useState(false)
       const [忙, 设忙] = React.useState(false)
@@ -190,6 +190,7 @@ window.__ModuleLoader__.load({
       const [memoryBusy, setMemoryBusy] = React.useState(false)
       const [memoryError, setMemoryError] = React.useState('')
       const [historySource, setHistorySource] = React.useState('file')
+      const [频率群, 设频率群] = React.useState('')
       const loadMemoryGroups = async () => {
         try {
           const response = await fetch('/dsh-fish-memory/list', { cache: 'no-store' })
@@ -228,6 +229,17 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         拉()
         get('/asr-status').then((r) => r && 设asr(r)).catch(() => {})
+      }, [])
+      React.useEffect(() => {
+        let stopped = false
+        const poll = async () => {
+          try {
+            const r = await get('/rice-alert')
+            if (!stopped && r?.ok && typeof r.power === 'boolean') 设态(old => old ? { ...old, 配置: { ...old.配置, 总开关: r.power } } : old)
+          } catch {}
+        }
+        const timer = setInterval(poll, 2000)
+        return () => { stopped = true; clearInterval(timer) }
       }, [])
       // 装依赖的时候每 2 秒看一眼进度（装完就停）
       React.useEffect(() => {
@@ -468,6 +480,8 @@ window.__ModuleLoader__.load({
       // ── 绑定表格：私聊和群聊分开，一行一条；长会话名也不换行 ──
       const 私聊们 = 绑定.map((x, i) => ({ x, i })).filter(({ x }) => (x.类型 || '群') === '私聊')
       const 群们 = 绑定.map((x, i) => ({ x, i })).filter(({ x }) => (x.类型 || '群') === '群')
+      const 选中群 = 群们.find(({ x }) => x.号码 === 频率群) || 群们[0]
+      const 当前群规则 = 选中群?.x || {}
       const 私聊编辑中 = 编辑行 != null && 私聊们.some(({ i }) => i === 编辑行)
       const 群编辑中 = 编辑行 != null && 群们.some(({ i }) => i === 编辑行)
       const 点名开 = x => x.类型 === '群' && (x.只听点名 == null ? !配置.群里听所有人 : Boolean(x.只听点名))
@@ -785,7 +799,11 @@ window.__ModuleLoader__.load({
           if (启动检查中 || 忙) return
           const 校验号 = ++总开关校验.current
           设启动检查中(true)
-          const r = await post('/power', { 开: v, 配置: { ...配置, 总开关: v } })
+          let r = await post('/power', { 开: v, 配置: { ...配置, 总开关: v } })
+          if (r?.riceLimitOnly && typeof confirmRice === 'function' && await confirmRice()) {
+            if (总开关校验.current !== 校验号) return
+            r = await post('/power', { 开: true, 配置: { ...配置, 总开关: true }, 跳过鱼粮上限: true })
+          }
           if (总开关校验.current !== 校验号) return
           设启动检查中(false)
           if (!r?.ok) {
@@ -911,20 +929,37 @@ window.__ModuleLoader__.load({
             h('div', { className: 'fish-modal-actions' },
               h('button', { type: 'button', className: 'fish-button fish-primary', disabled: 新建忙, onClick: () => { void 创建映射() } }, 新建忙 ? '创建中…' : '创建并绑定'),
               h('button', { type: 'button', className: 'fish-button fish-modal-cancel', disabled: 新建忙, onClick: () => { 设新建映射(null); 设新建错误('') } }, '取消')))) : null),
-        h('div', { style: S.card },
-          h('div', { style: { ...S.h, margin: '0 0 8px' } }, '群聊频率与概率'),
-          h('div', { style: S.dim },
-            '以下设置控制群聊处理频率与回复概率。'),
-          行('回复冷却时间（秒）', h('input', {'aria-label': '回复冷却秒',  type: 'number', min: 0, max: 300, style: S.small, value: String(配置.回复冷却秒 ?? 5), onChange: (e) => 改('回复冷却秒', Number(e.target.value)) }), '冷却期间的消息等待合并处理，默认 5 秒。'),
-          行('每分钟处理上限（条）', h('input', {'aria-label': '每分钟最多条',  type: 'number', min: 1, max: 120, style: S.small, value: String(配置.每分钟最多条 ?? 4), onChange: (e) => 改('每分钟最多条', Number(e.target.value)) }), '超出限制的消息等待下一时间窗口，默认 4 条。'),
-          行('单批合并上限（条）', h('input', {'aria-label': '合并最多条',  type: 'number', min: 1, max: 50, style: S.small, value: String(配置.合并最多条 ?? 8), onChange: (e) => 改('合并最多条', Number(e.target.value)) }), '合并时保留发言人标识，默认 8 条。'),
-          行('私聊来源标识', h('select', {'aria-label': '私聊署名',  style: S.small, value: String(配置.私聊署名 || '关'), onChange: (e) => 改('私聊署名', e.target.value) },
-            h('option', { value: '关' }, '无标识'), h('option', { value: '前缀' }, '[QQ] 前缀'), h('option', { value: '署名' }, '署名（对方：…）')),
-            '区分 QQ 消息与 DSH 手动输入，默认启用。'),
-          行('点名消息必回', h(Switch, {'aria-label': '点名必回',  type: 'checkbox', role: 'switch', checked: 配置.点名必回 !== false, onChange: (e) => 改('点名必回', Boolean(e.target.checked)) }), '默认启用；禁用后，点名消息也受回复概率限制。'),
-          行('回复概率（%）', h('input', {'aria-label': '回复概率',  type: 'number', min: 0, max: 100, style: S.small, value: String(配置.回复概率 ?? 100), onChange: (e) => 改('回复概率', Number(e.target.value)) }), '默认 100%；未选中的消息不进入模型上下文。'),
-          h('div', { style: { ...S.dim, marginTop: 4 } }, '合并窗口可在「消息收发」中配置，默认 3 秒。'),
-        ),
+        h('div', { className: 'fish-settings-stack' },
+          h('section', { style: S.card },
+            h('h2', null, '逐群读取规则'),
+            h('p', { style: S.dim }, '每个群独立配置。启用读取间隔后，默认每 10 分钟读取最新 30 条新消息，没有新消息不启动模型，超出上限的旧消息跳过。'),
+            h('p', { style: S.dim }, '点名必回复默认开启，点名消息及时处理。关闭后，点名也遵循读取间隔和回复概率。采样限制本次新消息，已有会话历史仍由 DSH 管理。')),
+          h('section', { style: S.card },
+            行('选择群聊', h('select', { 'aria-label': '选择群聊', style: S.wide, disabled: !群们.length,
+              value: 选中群?.x.号码 || '', onChange: e => 设频率群(e.target.value) },
+              ...(群们.length ? 群们.map(({ x }) => h('option', { key: x.号码, value: x.号码 }, (x.称呼 || '群聊') + ' · ' + x.号码)) : [h('option', { key: '', value: '' }, '暂无群聊')])))),
+          (() => {
+            if (!选中群) return h('p', { style: S.dim }, '暂无群聊映射，请先在“绑定”页添加。')
+            const x = 当前群规则
+            const 名称前缀 = 选中群.x.号码
+            const 修改 = 补 => 改绑定(选中群?.i, 补)
+            const 数字 = (名称, 字段, 默认值, 最小, 最大, 说明) => 行(名称,
+              h('input', { 'aria-label': 名称前缀 + ' ' + 名称, type: 'number', min: 最小, max: 最大, style: S.small,
+                value: String(x[字段] ?? 默认值), onChange: e => 修改({ [字段]: Number(e.target.value) }) }), 说明)
+            return h('section', { style: S.card, 'aria-label': 名称前缀 + '的频率规则' },
+              h('h3', null, (选中群.x.称呼 || '群聊') + ' · ' + 选中群.x.号码),
+              行('启用读取间隔', 勾(x.启用读取间隔 !== false, v => 修改({ 启用读取间隔: v }), 名称前缀 + ' 启用读取间隔'), '关闭后实时接收，不应用下方的间隔、条数、概率及冷却规则；保留参数供重新开启使用。'),
+              h('fieldset', { disabled: x.启用读取间隔 === false, style: { border: 0, padding: 0, margin: 0, minWidth: 0, opacity: x.启用读取间隔 === false ? 0.54 : 1 } },
+              数字('读取间隔（分钟）', '读取间隔分', 10, 0, 1440, '默认 10 分钟；0 为实时接收。到点仅采样最新消息，不补读积压。'),
+              数字('最新消息上限（条）', '读取最多条', 30, 1, 100, '定时采样每批最多读取的消息数，默认 30 条，最多 100 条。'),
+              行('点名必回复', 勾(x.点名必回 ?? 配置.点名必回 !== false, v => 修改({ 点名必回: v }), 名称前缀 + ' 点名必回复'), '开启后，@、引用机器人和点名关键词及时处理，跳过采样间隔、概率和冷却限制。'),
+              数字('回复概率（%）', '回复概率', 配置.回复概率 ?? 100, 0, 100, '采样后、启动模型前抽选整批消息；默认 100%，未选中不消耗模型 token。'),
+              !(Number(x.读取间隔分 ?? 10) > 0) ? h('div', null,
+                数字('回复冷却（秒）', '回复冷却秒', 配置.回复冷却秒 ?? 5, 0, 300, '实时模式下，冷却期间等待处理。'),
+                数字('每分钟处理上限（批）', '每分钟最多条', 配置.每分钟最多条 ?? 4, 1, 120, '实时模式下，超额批次等待下一窗口。'),
+                数字('单批合并上限（条）', '合并最多条', 配置.合并最多条 ?? 8, 1, 50, '实时模式合并消息时保留发言人标识。')) : null))
+          })()),
+
       ]
 
       // ───────────── 消息 ─────────────
@@ -936,6 +971,8 @@ window.__ModuleLoader__.load({
         ),
         h('div', { style: S.card },
           h('div', { style: { ...S.h, margin: '0 0 8px' } }, '发送格式'),
+          行('私聊来源标识', h('select', { 'aria-label': '私聊署名', style: S.small, value: String(配置.私聊署名 || '关'), onChange: e => 改('私聊署名', e.target.value) },
+            h('option', { value: '关' }, '无标识'), h('option', { value: '前缀' }, '[QQ] 前缀'), h('option', { value: '署名' }, '署名')), '区分 QQ 消息与 DSH 手动输入。'),
           行('仅发送 [QQ] 标记内容', 勾(配置.只发标记内, (v) => 改('只发标记内', v)), '仅发送 [QQ]…[/QQ] 内的内容；转入消息会附带格式提示。'),
           行('仅转发 QQ 触发的回复', 勾(配置.只回QQ唤醒, (v) => 改('只回QQ唤醒', v)), '默认开启，仅转发 QQ 消息及获准自动触发的回复。'),
           行('包含自动触发的回复', 勾(配置.自动触发也发, (v) => 改('自动触发也发', v)), '默认开启，包含主动消息和定时任务；DSH 手动对话不转发。'),
@@ -1042,7 +1079,7 @@ window.__ModuleLoader__.load({
         h('div', { id: 'qq-reply-threshold', style: S.card },
           h('div', { style: { ...S.h, margin: '0 0 8px' } }, '回复门槛'),
           h('div', { style: S.dim },
-            '回复门槛按绑定单独启用。'
+            '回复门槛在“绑定”页按群启用。'
             + '私聊不执行门槛判断。'),
           h('div', { style: { ...S.dim, marginTop: 6 } },
             '模型判断消息是否需要回复；未通过判断时不向 QQ 发送回复。'),
@@ -1209,7 +1246,8 @@ window.__ModuleLoader__.load({
       const 页面 = {
         '连接': 分区(总开关卡片, 消息卡片[0], 总览卡片[0]),
         '绑定': 分区(绑定提醒, 绑定卡片[1]),
-        '消息策略': 分区(消息卡片[1], 消息卡片[2], 绑定卡片[2], 门槛卡片[0]),
+        '消息策略': 分区(消息卡片[1], 消息卡片[2], 门槛卡片[0]),
+        '群聊频率': 分区(绑定卡片[2]),
         '角色设定': 分区(代写按钮, 绑定卡片[0], 特殊设定卡片, 映射角色('私聊'), 映射角色('群')),
         'QQ 账号': 分区(h('section', { style: S.card },
           h('h2', null, 'QQ 账号操作权限'),

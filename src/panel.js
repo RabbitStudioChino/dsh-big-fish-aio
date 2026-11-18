@@ -23,13 +23,13 @@ const DESCRIPTIONS = [
   '管理更新渠道，查看版本与项目来源。',
 ]
 const submenus = {
-  1: ['连接', '绑定', '消息策略', '角色设定', 'QQ 账号', 'QQ 空间', '表情包', '语音转写', '语音发送', '图片与文件', '聊天记录'].map(x => [x, x]),
+  1: ['连接', '绑定', '消息策略', '群聊频率', '角色设定', 'QQ 账号', 'QQ 空间', '表情包', '语音转写', '语音发送', '图片与文件', '聊天记录'].map(x => [x, x]),
   2: ['记忆库', 'RAG 语义召回'].map(x => [x, x]),
   3: [['mood', '心情'], ['bind', '会话绑定'], ['judge', '判断与注入'], ['charm', '挂饰']],
 }
 const TAB_ENGLISH = ['OVERVIEW', 'QQ LINK', 'MEMORY', 'MOOD', 'PROACTIVE MESSAGES', 'OPEN PLATFORM', 'FILE MANAGER', 'RUNTIME LOGS', 'TOKEN USAGE', 'UPDATES & SOURCES']
 const SUBMENU_ENGLISH = {
-  1: ['CONNECTION', 'BINDINGS', 'MESSAGE POLICIES', 'ROLES', 'QQ ACCOUNT', 'QQ SPACE', 'STICKERS', 'SPEECH TO TEXT', 'TEXT TO SPEECH', 'IMAGES & FILES', 'CHAT HISTORY'],
+  1: ['CONNECTION', 'BINDINGS', 'MESSAGE POLICIES', 'GROUP FREQUENCY', 'ROLES', 'QQ ACCOUNT', 'QQ SPACE', 'STICKERS', 'SPEECH TO TEXT', 'TEXT TO SPEECH', 'IMAGES & FILES', 'CHAT HISTORY'],
   2: ['LIBRARY', 'RAG SEMANTIC RECALL'],
   3: ['MOOD STATUS', 'BINDINGS', 'ASSESSMENT & CONTEXT', 'CHARMS'],
 }
@@ -144,7 +144,7 @@ function FishConfirmHost() {
     return () => FISH_CONFIRM.listeners.delete(update)
   }, [])
   if (!item) return null
-  return h(FishModal, { className: 'fish-modal fish-confirm' },
+  return h(FishModal, { className: 'fish-modal fish-confirm', tone: item.danger ? 'danger' : undefined },
     h('div', {
       className: 'fish-modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fish-confirm-title', 'aria-describedby': 'fish-confirm-desc',
       onKeyDown: (e) => { if (e.key === 'Escape') fishFinishConfirm(false) },
@@ -155,6 +155,35 @@ function FishConfirmHost() {
     h('div', { className: 'fish-modal-actions' },
       h('button', { type: 'button', className: 'fish-button fish-modal-cancel', autoFocus: true, onClick: () => fishFinishConfirm(false) }, item.cancelText),
       h('button', { type: 'button', className: 'fish-button ' + (item.danger ? 'fish-danger' : 'fish-primary'), onClick: () => fishFinishConfirm(true) }, item.confirmText))))
+}
+
+function fishAskRiceResume() {
+  return fishAskConfirm({ title: '每日鱼粮已达上限', description: '大肥鱼总开关已保持关闭。重新开启将允许当前工作区今天继续使用鱼粮，其余启动检查仍须通过。已发起的模型请求可能继续计费。', confirmText: '重新开启', cancelText: '保持关闭', danger: true })
+}
+function RiceAlertHost() {
+  React.useEffect(() => {
+    let stopped = false, busy = false
+    const check = async () => {
+      if (busy || FISH_CONFIRM.current) return
+      busy = true
+      try {
+        const result = await request('/dsh-qq-bridge/rice-alert').catch(() => null)
+        const alert = result?.alert
+        if (stopped || FISH_CONFIRM.current || !alert || localStorage.getItem('big-fish-rice-alert') === alert.id) return
+        localStorage.setItem('big-fish-rice-alert', alert.id)
+        if (await fishAskRiceResume()) {
+          if (stopped) return
+          await request('/dsh-qq-bridge/power', { method: 'POST', body: JSON.stringify({ 开: true, 跳过鱼粮上限: true }) })
+          fishNotify('大肥鱼已重新开启')
+        }
+      } catch (error) { if (!stopped) fishNotify('鱼粮状态检查或重新开启失败：' + error.message) }
+      finally { busy = false }
+    }
+    void check()
+    const timer = setInterval(check, 2000)
+    return () => { stopped = true; clearInterval(timer) }
+  }, [])
+  return null
 }
 
 const FISH_TEXT = { current: null, serial: 0, listeners: new Set() }
@@ -572,6 +601,14 @@ function Rice({ notify, active = true } = {}) {
   const [thresholds, setThresholds] = React.useState({ dailyLimit: '', lowBalance: '' })
   const [thresholdBusy, setThresholdBusy] = React.useState(false)
   const [thresholdError, setThresholdError] = React.useState('')
+  const [balance, setBalance] = React.useState(null)
+  const latestBalance = React.useRef(0)
+  const [balanceError, setBalanceError] = React.useState('')
+  const [period, setPeriod] = React.useState('day')
+  const [customFrom, setCustomFrom] = React.useState('')
+  const [customTo, setCustomTo] = React.useState('')
+  const [shareOpen, setShareOpen] = React.useState(false)
+  const [datePicker, setDatePicker] = React.useState(null)
   const closeThresholds = () => { if (!thresholdBusy) setThresholdOpen(false) }
   const saveThresholds = async event => {
     event.preventDefault()
@@ -579,7 +616,7 @@ function Rice({ notify, active = true } = {}) {
     setThresholdBusy(true); setThresholdError('')
     try {
       const result = await request('/dsh-qq-bridge/rice-thresholds', { method: 'POST', body: JSON.stringify({ dailyLimit: Number(thresholds.dailyLimit), lowBalance: Number(thresholds.lowBalance) }) })
-      setData(old => ({ ...old, thresholds: result.thresholds }))
+      setData(old => ({ ...old, thresholds: result.thresholds })); setThresholds({ dailyLimit: result.thresholds.dailyLimit.toFixed(2), lowBalance: result.thresholds.lowBalance.toFixed(2) })
       notify?.('鱼粮阈值已保存')
     } catch (error) { setThresholdError(error.message) }
     finally { setThresholdBusy(false) }
@@ -596,39 +633,28 @@ function Rice({ notify, active = true } = {}) {
       if (typeof notify === 'function') notify('读取 Token 用量失败：' + e.message, { holdMs: 7000 })
     } finally { if (id === latestLoad.current) setBusy(false) }
   }
-  React.useEffect(() => { if (active) void load() }, [active])
-  const fmt = (n) => {
-    const v = Math.max(0, Number(n) || 0)
-    if (v >= 1e6) return (v / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'
-    if (v >= 1e3) return (v / 1e3).toFixed(1).replace(/\.?0+$/, '') + 'K'
-    return Math.round(v).toLocaleString('zh-CN')
+  const loadBalance = async () => {
+    const id = ++latestBalance.current
+    try {
+      const value = await request('/dsh-qq-bridge/rice-balance')
+      if (id === latestBalance.current) { setBalance(value); setBalanceError('') }
+    } catch (e) { if (id === latestBalance.current) { setBalance(null); setBalanceError(e.message) } }
   }
+  React.useEffect(() => { if (active) { void load(); void loadBalance() } }, [active])
+  const fmt = riceTokens
   const money = (n) => {
     const v = Math.max(0, Number(n) || 0)
     return '¥' + (v >= 100 ? v.toFixed(2) : v >= 1 ? v.toFixed(3) : v.toFixed(4))
   }
   const dayKey = (d) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-')
-  const zero = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: 0,
-    ragCalls: 0, ragDocumentCalls: 0, ragQueryCalls: 0, ragFailed: 0, ragPending: 0,
-    ragTokens: 0, ragUnknownTokens: 0, ragUnpriced: 0, ragCost: 0 })
-  const add = (a, b) => {
-    const out = zero()
-    for (const key of Object.keys(out)) out[key] = (a[key] || 0) + (b[key] || 0)
-    return out
-  }
   const ragMoney = value => '¥' + (Number(value) || 0).toFixed(6)
   const days = data?.days || []
   const byDay = new Map(days.map(d => [d.date, d]))
   const today = data?.今天 || dayKey(new Date())
-  const todayTotal = byDay.get(today) || zero()
-  const sumRange = (n) => {
-    if (!n) return data?.全部 || zero()
-    const end = new Date(); const start = new Date(); start.setDate(end.getDate() - n + 1)
-    const from = dayKey(start), to = dayKey(end)
-    let out = zero()
-    for (const d of days) if (d.date >= from && d.date <= to) out = add(out, d)
-    return out
-  }
+  const selectedWindow = riceWindow(period, today, customFrom, customTo)
+  const summary = riceSummary(days, selectedWindow)
+  const rangeLabel = selectedWindow.error ? '自定义日期未完成' : (selectedWindow.from || '最早记录') + ' 至 ' + selectedWindow.to
+  const sessionColors = ['--fish-blue', '--fish-gold', '--fish-mint', '--fish-pink', '--fish-info', '--fish-danger']
   const series = React.useMemo(() => {
     const end = new Date(); const start = new Date()
     if (range) start.setDate(end.getDate() - range + 1)
@@ -638,7 +664,7 @@ function Rice({ notify, active = true } = {}) {
       start.setTime(new Date(first + 'T00:00:00').getTime())
     }
     const out = []; const d = new Date(start)
-    while (d <= end) { out.push(byDay.get(dayKey(d)) || { date: dayKey(d), ...zero() }); d.setDate(d.getDate() + 1) }
+    while (d <= end) { out.push(byDay.get(dayKey(d)) || { date: dayKey(d), total: 0 }); d.setDate(d.getDate() + 1) }
     return out
   }, [days, range])
   const chart = React.useMemo(() => {
@@ -668,22 +694,20 @@ function Rice({ notify, active = true } = {}) {
     }
   }, [days])
   const sessions = data?.会话 || []
-  const showTip = (event, date) => {
+  const showTip = (event, date, session = null) => {
     const width = typeof window !== 'undefined' ? Math.min(300, window.innerWidth - 28) : 300
-    const height = 250
-    const x = Math.max(10, Math.min((event.clientX || 0) + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - width - 10))
-    const y = Math.max(10, Math.min((event.clientY || 0) + 14, (typeof window !== 'undefined' ? window.innerHeight : 900) - height - 10))
-    setTip({ date, x, y })
+    const rect = event.currentTarget?.getBoundingClientRect?.()
+    const clientX = event.clientX ?? rect?.left ?? 0, clientY = event.clientY ?? rect?.bottom ?? 0
+    const height = session ? 150 : 250
+    const x = Math.max(10, Math.min(clientX + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - width - 10))
+    const y = Math.max(10, Math.min(clientY + 14, (typeof window !== 'undefined' ? window.innerHeight : 900) - height - 10))
+    setTip({ date, x, y, session })
   }
   const tipDay = tip ? byDay.get(tip.date) : null
   return h('div', { className: 'rice-page' },
     h('div', { className: 'fish-toolbar rice-toolbar' },
       h('div', null, h('span', { className: 'fish-kicker' }, 'RICE · 每日用量'), h('h2', null, '吃大米饭')),
-      h('div', { className: 'fish-actions' },
-        h('button', { type: 'button', className: 'fish-button rice-threshold-button', disabled: !data, onClick: () => {
-          setThresholds({ dailyLimit: data?.thresholds?.dailyLimit || '', lowBalance: data?.thresholds?.lowBalance || '' }); setThresholdError(''); setThresholdOpen(true)
-        } }, '阈值设定'),
-        h(FishRefreshButton, { busy, onClick: load, label: '刷新用量' }))),
+      null),
     thresholdOpen ? h(FishModal, { className: 'fish-modal', onClick: event => { if (event.target === event.currentTarget) closeThresholds() }, onKeyDown: event => { if (event.key === 'Escape') { event.preventDefault(); closeThresholds() } } },
       h('form', { className: 'fish-modal-card rice-threshold-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rice-threshold-title', onSubmit: saveThresholds },
         h('span', { className: 'fish-kicker' }, 'RICE · 鱼粮管理'),
@@ -692,7 +716,7 @@ function Rice({ notify, active = true } = {}) {
         [['dailyLimit', '每日鱼粮上限', '按北京时间统计当前工作区每日估算花费（含 RAG）。达到 80% 时私信提醒主人；达到上限自动关闭总开关，次日不会自动开启。'],
           ['lowBalance', '提醒补充鱼粮', 'DeepSeek 账户人民币余额（含赠金）低于此金额时私信主人续费。不受主动搭话及总开关影响，余额恢复后再次不足才会重新提醒。']].map(([key, label, help], i) =>
           h('label', { className: 'rice-threshold-field', key }, h('strong', null, label + '（人民币元）'),
-            h(FishInput, { icon: '¥', type: 'number', min: '0', max: '1000000000', step: 'any', inputMode: 'decimal', autoFocus: i === 0, 'aria-label': label + '（人民币元）', 'aria-describedby': 'rice-help-' + key, disabled: thresholdBusy, value: thresholds[key], placeholder: '0.00', onChange: event => setThresholds({ ...thresholds, [key]: event.target.value }) }),
+            h(FishInput, { icon: '¥', type: 'number', min: '0', max: '1000000000', step: 'any', inputMode: 'decimal', autoFocus: i === 0, 'aria-label': label + '（人民币元）', 'aria-describedby': 'rice-help-' + key, disabled: thresholdBusy, value: thresholds[key], placeholder: '0.00', onBlur: event => { const v = event.target.value; if (v !== '' && Number.isFinite(Number(v))) setThresholds(old => ({ ...old, [key]: Number(v).toFixed(2) })) }, onChange: event => setThresholds({ ...thresholds, [key]: event.target.value }) }),
             h('span', { className: 'fish-muted', id: 'rice-help-' + key }, help))),
         h('p', { className: 'fish-muted' }, '请先在 QQ 私聊映射中勾选主人 QQ 并连接 QQ 后端。试运行不发送私信。每分钟及会话用量更新时检查，已发起的模型请求可能继续计费。'),
         thresholdError ? h('p', { className: 'fish-modal-error', role: 'alert' }, thresholdError) : null,
@@ -700,14 +724,44 @@ function Rice({ notify, active = true } = {}) {
           h('button', { type: 'submit', className: 'fish-button fish-primary', disabled: thresholdBusy }, thresholdBusy ? '保存中…' : '保存')))) : null,
     h('p', { className: 'fish-muted' }, '统计当前绑定工作区（' + (data?.工作区?.path || '读取中…') + '）的会话与 RAG 用量。RAG 按实际请求记录，含索引构建和查询，缓存复用不新增调用。'),
     error ? h('p', { className: 'fish-modal-error', role: 'alert' }, error) : null,
-    h('div', { className: 'rice-stats' },
-      [['今天', todayTotal], ['近 7 天', sumRange(7)], ['近 30 天', sumRange(30)], ['全部', data?.全部 || zero()]].map(([label, v]) =>
-        h('article', { key: label, className: 'fish-card rice-stat' },
-          h('span', { className: 'rice-stat-label' }, label),
-          h('strong', { className: 'rice-stat-value' }, fmt(v.total)),
-          h('span', { className: 'rice-stat-cost' }, '≈ ' + money(v.cost || 0)),
-          h('span', { className: 'rice-stat-sub' }, '输入 ' + fmt(v.input) + ' · 输出 ' + fmt(v.output)),
-          h('span', { className: 'rice-stat-sub' }, '缓存 ' + fmt(v.cacheRead + v.cacheWrite) + ' · RAG ' + fmt(v.ragTokens))))),
+    h('div', { className: 'rice-dashboard' },
+      h('article', { className: 'fish-card rice-balance-card' },
+        h('span', { className: 'fish-kicker' }, 'WALLET · 官方账户'),
+        h('h3', null, '当前余额'),
+        h('strong', { className: 'rice-balance-value' + (balance && data?.thresholds?.lowBalance > 0 && balance.balance < data.thresholds.lowBalance ? ' is-low' : '') }, balance ? '¥' + balance.balance.toFixed(2) : '—'),
+        h('p', { className: 'fish-muted' }, 'DeepSeek 人民币可用余额 · 含赠金'),
+        balanceError ? h('p', { className: 'fish-modal-error', role: 'status' }, balanceError) : h('p', { className: 'fish-muted' }, balance ? '更新于 ' + new Date(balance.updatedAt).toLocaleTimeString('zh-CN') : '正在读取官方余额…'),
+      h('div', { className: 'fish-actions' },
+        h('button', { type: 'button', className: 'fish-button rice-threshold-button', disabled: !data, onClick: () => {
+          setThresholds({ dailyLimit: Number(data?.thresholds?.dailyLimit || 0).toFixed(2), lowBalance: Number(data?.thresholds?.lowBalance || 0).toFixed(2) }); setThresholdError(''); setThresholdOpen(true)
+        } }, '阈值设定'),
+        h(FishRefreshButton, { busy, onClick: async () => { await Promise.all([load(), loadBalance()]) }, label: '刷新用量' })),
+      ),
+      h('article', { className: 'fish-card rice-summary-card' },
+        h('div', { className: 'rice-summary-toolbar' },
+          h('div', { className: 'fish-subnav', 'aria-label': '用量统计范围' }, ...[['day', '日'], ['week', '周'], ['month', '月'], ['total', '总计'], ['custom', '自定义']].map(([key, title]) =>
+            h('button', { type: 'button', key, className: 'fish-button' + (period === key ? ' fish-primary' : ''), 'aria-pressed': period === key, onClick: event => {
+              if (key !== 'custom') { setPeriod(key); return }
+              const rect = event.currentTarget.getBoundingClientRect()
+              const top = Math.max(12, Math.min(rect.bottom + 10, window.innerHeight - 400))
+              setDatePicker({ left: Math.max(12, Math.min(rect.left, window.innerWidth - 604)), top, maxHeight: window.innerHeight - top - 12 })
+            } }, title))),
+          h('button', { className: 'fish-button', type: 'button', disabled: !data || Boolean(selectedWindow.error), onClick: () => setShareOpen(true) }, '分享')),
+        selectedWindow.error ? h('p', { className: 'fish-modal-error', role: 'status' }, selectedWindow.error) : h('p', { className: 'fish-muted rice-summary-date' }, rangeLabel + ' · 北京时间'),
+        h('span', { className: 'fish-kicker' }, 'TOKEN 总数'),
+        h('strong', { className: 'rice-summary-value' }, fmt(summary.total)),
+        h('span', { className: 'rice-stat-cost' }, '≈ ' + money(summary.cost)),
+        h('div', { className: 'rice-summary-details' },
+          ...[['输入', summary.input], ['输出', summary.output], ['缓存', summary.cacheRead + summary.cacheWrite], ['RAG', summary.ragTokens]].map(([title, value]) => h('span', { key: title }, title + ' ', h('strong', null, fmt(value))))),
+        h('div', { className: 'rice-session-stack', role: 'list', 'aria-label': '各会话 Token 消耗占比' },
+          ...summary.sessions.map((session, i) => h('span', { key: session.id, style: { flexGrow: session.total, background: 'var(' + sessionColors[i % sessionColors.length] + ')' },
+            role: 'listitem', tabIndex: 0, 'aria-label': (session.title || '未命名会话') + ' · ' + fmt(session.total) + ' Token',
+            onMouseEnter: e => showTip(e, rangeLabel, session), onMouseLeave: () => setTip(null), onFocus: e => showTip(e, rangeLabel, session), onBlur: () => setTip(null) }))),
+        h('p', { className: 'fish-muted rice-stack-caption' }, summary.sessions.length ? summary.sessions.length + ' 个会话 · 色段表示各会话 Token 占比，悬停查看明细' : summary.total ? '当前记录未包含会话细分' : '当前范围暂无用量记录'))),
+    datePicker ? h(RiceDateRange, { today, from: customFrom, to: customTo, position: datePicker, onClose: () => setDatePicker(null), onApply: (from, to) => {
+      setCustomFrom(from); setCustomTo(to); setPeriod('custom'); setDatePicker(null)
+    } }) : null,
+    shareOpen ? h(RiceShare, { days, today, onClose: () => setShareOpen(false) }) : null,
     h('div', { className: 'rice-grid' },
       h('section', { className: 'fish-card rice-chart-card' },
         h('div', { className: 'fish-section-head' },
@@ -753,6 +807,11 @@ function Rice({ notify, active = true } = {}) {
         )
       ) : h('p', { className: 'fish-muted' }, '当前工作区暂无可统计会话。')),
     tip ? h('div', { className: 'rice-tooltip', role: 'tooltip', style: { left: tip.x + 'px', top: tip.y + 'px' } },
+      tip.session ? h(React.Fragment, null,
+        h('div', { className: 'rice-tip-date' }, tip.date),
+        h('div', { className: 'rice-tip-label' }, tip.session.title || '未命名会话'),
+        h('div', { className: 'rice-tip-total' }, fmt(tip.session.total), h('span', null, ' TOKEN')),
+        h('div', { className: 'rice-stat-sub' }, '占当前范围 ' + (summary.total ? tip.session.total / summary.total * 100 : 0).toFixed(1) + '%')) : h(React.Fragment, null,
       h('div', { className: 'rice-tip-date' }, tip.date),
       h('div', { className: 'rice-tip-total' }, fmt(tipDay?.total || 0), h('span', null, ' TOKEN')),
       h('div', { className: 'rice-tip-cost' }, '≈ ' + money(tipDay?.cost || 0)),
@@ -765,7 +824,7 @@ function Rice({ notify, active = true } = {}) {
               h('div', { className: 'rice-tip-row-head' }, h('span', null, s.title || s.id.slice(-8)), h('strong', null, fmt(s.total)), h('em', null, pct + '%')),
               h('div', { className: 'rice-tip-bar' }, h('i', { style: { width: Math.max(2, pct) + '%' } })))
           })
-        : h('div', { className: 'rice-tip-empty' }, '当日无记录')) : null)
+        : h('div', { className: 'rice-tip-empty' }, '当日无记录'))) : null)
 }
 
 function UpdateArtwork({ outcome = 'idle' }) {
@@ -1146,7 +1205,7 @@ function Page() {
   const englishPath = TAB_ENGLISH[tab] + (subTitle ? ' > ' + SUBMENU_ENGLISH[tab][subIndex] : '')
   const render = [
     () => h(Overview, { navigate, notify: fishNotify }),
-    () => h(QQ, { page: subpage[1], onPageChange: key => selectSubpage(1, key), guard: qqGuard, notify: fishNotify, help: fishShowHelp, hideHelp: fishHideHelp, laterHideHelp: fishScheduleHelpHide, confirm: fishAskConfirm, editRole: fishAskText, openRoleWriter: fishOpenRoleWriter, openFileManager }),
+    () => h(QQ, { page: subpage[1], onPageChange: key => selectSubpage(1, key), guard: qqGuard, notify: fishNotify, help: fishShowHelp, hideHelp: fishHideHelp, laterHideHelp: fishScheduleHelpHide, confirm: fishAskConfirm, confirmRice: fishAskRiceResume, editRole: fishAskText, openRoleWriter: fishOpenRoleWriter, openFileManager }),
     () => h(Memory, { page: subpage[2], onPageChange: key => selectSubpage(2, key), notify: fishNotify, active: tab === 2 }),
     () => h(Mood, { page: subpage[3], onPageChange: key => selectSubpage(3, key), notify: fishNotify, Dialog: components['dsh-fish-memory'].MemoryDialog }),
     () => h(Speak, { guard: speakGuard, notify: fishNotify }), () => h(OpenPlatform, { notify: fishNotify }), () => h(FileManager, { notify: fishNotify }), () => h(RunLog, { notify: fishNotify }), () => h(Rice, { notify: fishNotify, active: tab === tabs.indexOf('吃大米饭') }), () => h(Updates, { notify: fishNotify, versionInfo, onVersionInfo: setVersionInfo }),
@@ -1159,6 +1218,7 @@ function Page() {
       h(FishRoleWriterHost),
       h(FishHelpHost),
       h(FishConfirmHost),
+      h(RiceAlertHost),
       h(FishSelectLayer),
       h('aside', { className: 'fish-binder' },
         h('div', { className: 'fish-rings', 'aria-hidden': true }, ...[0, 1, 2, 3, 4, 5, 6].map(i => h('span', { key: i }))),

@@ -34,7 +34,7 @@ test('80% 单日去重及重启持久化，到限关闭，跨日不自动开启'
     f.set({ spent: 8 }); await Promise.all([f.service.check(), f.service.check()]); assert.equal(f.messages.length, 1)
     await createRiceThresholds(f.options).check(); assert.equal(f.messages.length, 1)
     f.set({ spent: 10 }); await f.service.check(); assert.equal(f.stops, 1); assert.equal(f.c.总开关, false)
-    f.set({ day: '2026-11-10', spent: 8 }); await f.service.check(); assert.equal(f.messages.length, 2); assert.equal(f.c.总开关, false)
+    f.set({ day: '2026-11-10', spent: 8 }); await f.service.check(); assert.equal(f.messages.length, 3); assert.equal(f.c.总开关, false)
   } finally { f.close() }
 })
 
@@ -86,7 +86,7 @@ test('阈值按钮在刷新左侧，人民币金额统一提交保存，失败�
     return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next }]
   }, useRef: () => ({ current: 0 }), useEffect() {}, useMemo: fn => fn() }
   slots[0] = { days: [], thresholds: { dailyLimit: 10, lowBalance: 3 } }
-  const Rice = vm.runInNewContext(source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
+  const Rice = vm.runInNewContext(readFileSync(new URL('../src/rice-report.js', import.meta.url), 'utf8') + '\n' + source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
     React, h: React.createElement, FishRefreshButton: 'button', FishModal: 'modal', FishInput: 'input', request: async (url, opts) => {
       assert.equal(url, '/dsh-qq-bridge/rice-thresholds'); payload = JSON.parse(opts.body)
       if (fail) throw Error('offline')
@@ -100,7 +100,10 @@ test('阈值按钮在刷新左侧，人民币金额统一提交保存，失败�
   buttons[0].props.onClick(); nodes = render()
   const inputs = nodes.filter(n => n.type === 'input')
   assert.deepEqual(inputs.map(n => n.props['aria-label']), ['每日鱼粮上限（人民币元）', '提醒补充鱼粮（人民币元）'])
-  assert.ok(inputs.every(n => n.props.type === 'number' && n.props.icon === '¥' && n.props.inputMode === 'decimal' && !n.props.onBlur))
+  assert.equal(inputs[1].props.value, '3.00')
+  inputs[1].props.onChange({ target: { value: '5' } }); render().filter(n => n.type === 'input')[1].props.onBlur({ target: { value: '5' } })
+  assert.equal(render().filter(n => n.type === 'input')[1].props.value, '5.00')
+  assert.ok(inputs.every(n => n.props.type === 'number' && n.props.icon === '¥' && n.props.inputMode === 'decimal' && typeof n.props.onBlur === 'function'))
   assert.ok(nodes.some(n => n.type === 'button' && n.props.type === 'submit' && n.children.includes('保存')))
   nodes.find(n => n.type === 'input').props.onChange({ target: { value: '12.5' } }); nodes = render()
   nodes.filter(n => n.type === 'input')[1].props.onChange({ target: { value: '3.25' } }); nodes = render()
@@ -111,4 +114,45 @@ test('阈值按钮在刷新左侧，人民币金额统一提交保存，失败�
   assert.deepEqual(payload, { dailyLimit: 12.5, lowBalance: 3.25 }); assert.equal(render().some(n => n.type === 'form'), true)
   render().find(n => n.type === 'button' && n.children.includes('关闭')).props.onClick()
   assert.equal(render().some(n => n.type === 'form'), false)
+})
+
+
+test('超限警示与继续运行授权持久化，仅适用当天工作区和原上限', async () => {
+  const f = fixture()
+  try {
+    f.service.save({ dailyLimit: 10, lowBalance: 0 }); f.set({ spent: 11 })
+    await f.service.check()
+    assert.equal(f.service.alert().limit, 10)
+    assert.match(f.messages[0].text, /达到上限后可在大肥鱼插件中继续开启/)
+    f.service.resume(); f.c.总开关 = true
+    await createRiceThresholds(f.options).check(); assert.equal(f.stops, 1)
+    assert.equal(f.service.alert(), null)
+    f.set({ day: '2026-11-10' }); await f.service.check(); assert.equal(f.stops, 2)
+    f.service.resume(); f.c.总开关 = true
+    f.service.save({ dailyLimit: 9, lowBalance: 0 }); await f.service.check(); assert.equal(f.stops, 3)
+    f.service.resume(); f.c.总开关 = true; f.c.工作区 = 'other'
+    await f.service.check(); assert.equal(f.stops, 4)
+  } finally { f.close() }
+})
+
+test('插件轮询弹出超限警示，选择重开只传鱼粮跳过标记并去重', async () => {
+  const { readFileSync } = await import('node:fs'), { default: vm } = await import('node:vm')
+  const source = readFileSync(new URL('../src/panel.js', import.meta.url), 'utf8')
+  let poll, prompt, requestBody, clean
+  const storage = new Map()
+  const sandbox = { React: { useEffect(fn) { clean = fn() } }, setInterval(fn) { poll = fn; return 1 }, clearInterval() {},
+    localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) }, fishNotify() {},
+    request: async (path, options) => {
+      if (path.endsWith('rice-alert')) return { alert: { id: 'cutoff-1' } }
+      assert.ok(path.endsWith('/power')); requestBody = JSON.parse(options.body); return { ok: true }
+    } }
+  vm.createContext(sandbox)
+  vm.runInContext(source.slice(source.indexOf('const FISH_CONFIRM ='), source.indexOf('const FISH_TEXT =')), sandbox)
+  sandbox.fishAskConfirm = async options => { prompt = options; return true }
+  sandbox.RiceAlertHost()
+  await new Promise(setImmediate)
+  assert.equal(prompt.danger, true); assert.equal(prompt.cancelText, '保持关闭'); assert.equal(prompt.confirmText, '重新开启')
+  assert.deepEqual(requestBody, { 开: true, 跳过鱼粮上限: true })
+  prompt = null; await poll(); assert.equal(prompt, null)
+  clean()
 })

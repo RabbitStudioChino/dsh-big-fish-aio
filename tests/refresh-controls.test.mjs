@@ -64,26 +64,26 @@ test('共享刷新图标在请求期间旋转、阻止连点，成功和失败�
 test('吃大米饭首次进入和保留挂载后再次进入各读取一次，隐藏和普通重绘不读取', async () => {
   const state = hooks(), requests = []
   const source = read('src/panel.js')
-  const Rice = vm.runInNewContext(source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
+  const Rice = vm.runInNewContext(read('src/rice-report.js') + '\n' + source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
     React: state.React, h: state.React.createElement, FishRefreshButton: 'refresh',
-    request: async path => { requests.push(path); return { days: [], 会话: [] } },
+    request: async path => { requests.push(path); return path.endsWith('rice-balance') ? { balance: 5, updatedAt: 1 } : { days: [], 会话: [] } },
   })
   const render = active => { state.reset(); return Rice({ active }) }
   render(false); assert.equal(requests.length, 0)
-  render(true); await new Promise(setImmediate); assert.equal(requests.length, 1)
-  render(true); assert.equal(requests.length, 1)
-  render(false); assert.equal(requests.length, 1)
   render(true); await new Promise(setImmediate); assert.equal(requests.length, 2)
-  assert.ok(requests.every(path => path === '/dsh-qq-bridge/rice'))
+  render(true); assert.equal(requests.length, 2)
+  render(false); assert.equal(requests.length, 2)
+  render(true); await new Promise(setImmediate); assert.equal(requests.length, 4)
+  assert.ok(requests.every(path => ['/dsh-qq-bridge/rice', '/dsh-qq-bridge/rice-balance'].includes(path)))
   assert.match(source, /h\(Rice, \{ notify: fishNotify, active: tab === tabs.indexOf\('吃大米饭'\) \}\)/)
 })
 
 test('快速切回用量页后，旧请求晚到不会覆盖新统计或提前结束刷新状态', async () => {
   const state = hooks(), pending = []
   const source = read('src/panel.js')
-  const Rice = vm.runInNewContext(source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
+  const Rice = vm.runInNewContext(read('src/rice-report.js') + '\n' + source.slice(source.indexOf('function Rice('), source.indexOf('function Updates(')) + '\nRice', {
     React: state.React, h: state.React.createElement, FishRefreshButton: 'refresh',
-    request: () => new Promise(resolve => pending.push(resolve)),
+    request: path => path.endsWith('rice-balance') ? Promise.resolve({ balance: 5, updatedAt: 1 }) : new Promise(resolve => pending.push(resolve)),
   })
   const render = active => { state.reset(); return Rice({ active }) }
   render(true); render(false); render(true)
