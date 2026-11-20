@@ -30,7 +30,7 @@ export default [
     rules: { 'no-unused-vars': 'off' },
   },
   {
-    files: ['modules/qq/tools/语音/朗读信号哨兵/*.js'],
+    files: ['modules/qq/tools/voice/read-aloud-sentinel/*.js'],
     languageOptions: { globals: { ...globals.browser, chrome: 'readonly' } },
   },
   {

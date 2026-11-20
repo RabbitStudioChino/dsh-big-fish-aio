@@ -10,7 +10,7 @@ import { checkSchema, validateValue } from '../lib/open-platform-schema.mjs'
 import { riceApi } from '../lib/rice-api.mjs'
 
 const object = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false })
-function fixture(config, apiConfig) {
+function fixture(config, apiConfig, options) {
   const home = mkdtempSync(join(tmpdir(), 'fish-open-')), previous = process.env.DSH_HOME
   process.env.DSH_HOME = home
   if (config !== undefined) writeFileSync(join(home, 'big-fish-open-platform.json'), config)
@@ -37,7 +37,7 @@ function fixture(config, apiConfig) {
     on(name, fn) { events.set(name, fn) }, interval(fn) { events.set('tick', fn) },
     webServer: { register({ path, handler }) { assert.equal(routes.has(path), false); routes.set(path, handler); return () => routes.delete(path) } },
   }
-  const platform = createOpenPlatform(ctx)
+  const platform = createOpenPlatform(ctx, options)
   const call = async (path, body, options = {}) => {
     const req = Readable.from([options.raw ?? JSON.stringify(body ?? {})])
     Object.assign(req, { method: body === undefined ? 'GET' : 'POST', headers: { host: 'localhost', 'content-type': 'application/json' }, ...options })
@@ -55,12 +55,38 @@ const memo = handler => ({ schemaVersion: 1, id: 'memo', version: '1.0.0', title
   id: 'add', title: '添加备忘', description: '保存一条备忘', readOnly: false, example: { text: '买牛奶' }, inputSchema: object({ text: { type: 'string', minLength: 1, maxLength: 100 } }), outputSchema: object({ id: { type: 'string' } }), handler,
 }] })
 
+test('四个内置提供方不可删除，旧移除标记不阻止重新接入', async () => {
+  const oldGrant = JSON.stringify({ rice: { deleted: true, enabled: false, sessionIds: [] } })
+  const f = fixture(oldGrant, undefined, { schedule: { list: () => ({ ok: true, tasks: [] }) } })
+  try {
+    f.platform.register(riceApi(() => ({})))
+    const ids = ['dsh_account', 'skills', 'rice', 'schedule']
+    const before = (await f.call('/catalog')).data.providers
+    assert.deepEqual(before.map(provider => provider.id), ids)
+    assert.ok(before.every(provider => provider.removable === false))
+    const rice = before.find(provider => provider.id === 'rice')
+    assert.equal(rice.enabled, false)
+    assert.deepEqual(rice.sessionIds, [])
+
+    for (const providerId of ids) {
+      const result = await f.call('/remove', { providerId })
+      assert.equal(result.status, 400)
+      assert.match(result.data.error.message, /内置接口不可删除/)
+    }
+    assert.equal(readFileSync(join(f.home, 'big-fish-open-platform.json'), 'utf8'), oldGrant)
+    assert.deepEqual((await f.call('/catalog')).data.providers, before)
+    const connected = f.platform.connect({ providerId: 'rice', enabled: true, sessionIds: ['private'] })
+    assert.equal(connected.providers.find(provider => provider.id === 'rice').enabled, true)
+  } finally { f.close() }
+})
+
 test('技能库列出全部能力，区分启用与本会话授权，实时反映关闭和删除', async () => {
   const f = fixture()
   try {
     const definition = memo(() => ({ id: 'unused' }))
     definition.operations[0].example = { text: 'private-business-data' }
     f.platform.register(definition)
+    assert.equal(f.platform.list().providers.find(provider => provider.id === 'memo').removable, true)
     const skills = f.platform.list().providers[1]
     assert.equal(skills.id, 'skills')
     assert.equal(skills.title, '大肥鱼技能库')

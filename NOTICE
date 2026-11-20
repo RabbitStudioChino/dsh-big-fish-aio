@@ -13,7 +13,7 @@ dsh-memory-rag：Copyright 2026 aonysen，Apache-2.0。
 
 jieba：Copyright (c) 2013 Sun Junyi，MIT。
 词典来源：https://github.com/fxsjy/jieba
-词条和词频处理说明见 modules/memory/lib/词典-来源.txt；完整许可见 modules/memory/lib/notices/jieba-LICENSE。
+词条和词频处理说明见 modules/memory/lib/dictionary-source.txt；完整许可见 modules/memory/lib/notices/jieba-LICENSE。
 
 新增整合来源（原作者 Yuuyuko-uu，完整原许可保留于各模块）：
 

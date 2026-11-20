@@ -1,7 +1,7 @@
 globalThis.useFishAutosave = save => ({ onBlurCapture: save, onChangeCapture: save })
 // 「通到 QQ」网页半边冒烟测试 —— 用假的 React / 假的 slots 把设置页渲染成一棵对象树。
 // 验：模块 id、inject、挂到 settings.section（id=qq-bridge 是 slot id，跟包名无关）、关键元素都渲染出来、不抛错。
-// 跑法： node tests/网页半边.mjs
+// 跑法： node tests/web.mjs
 
 let 捕获 = null
 globalThis.window = { __ModuleLoader__: { load: (o) => { 捕获 = o } } }

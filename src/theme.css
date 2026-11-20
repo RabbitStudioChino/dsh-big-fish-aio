@@ -3410,6 +3410,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .big-fish .fish-jump-flash::after {
+    animation: none;
     opacity: 1;
     box-shadow: inset 0 0 0 2px var(--fish-gold);
   }
@@ -3864,20 +3865,6 @@
 .big-fish .rice-page {
   display: grid;
   gap: 14px;
-}
-
-.big-fish .rice-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.big-fish .rice-toolbar h2 {
-  margin: 2px 0 0;
-  font-family: var(--fish-title);
-  font-size: 21px;
 }
 
 .big-fish .rice-stats {
@@ -4344,6 +4331,13 @@
 .big-fish .platform-page summary { cursor: pointer; }
 .big-fish .platform-path { display: block; overflow-wrap: anywhere; font-size: 12px; }
 .big-fish .platform-operation textarea { box-sizing: border-box; width: 100%; font-family: monospace; }
+.big-fish :is(.schedule-access, .schedule-form, .schedule-list) { padding: 18px; }
+.big-fish :is(.schedule-form, .schedule-list) { display: grid; gap: 14px; }
+.big-fish .schedule-fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
+.big-fish :is(.schedule-access, .schedule-item) { display: flex; flex-wrap: wrap; gap: 12px; align-items: start; justify-content: space-between; }
+.big-fish :is(.schedule-access, .schedule-item) > div:first-child { flex: 1 1 240px; min-width: 0; }
+.big-fish .schedule-item { border-top: 1px solid var(--fish-line); padding-top: 12px; }
+.big-fish .schedule-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .big-fish .platform-operation .memory-actions { margin-top: 0; }
 .big-fish .platform-response { display: grid; gap: 16px; }
 .big-fish .memory-dialog.platform-guide { width: min(1120px, calc(100vw - 48px)); }
@@ -4782,7 +4776,7 @@
 }
 
 /* 鱼粮工作台：余额与用量分开，报告在浏览器内生成。 */
-.big-fish .rice-dashboard { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(0, 3fr); gap: 20px; margin: 24px 0; }
+.big-fish .rice-dashboard { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(0, 3fr); gap: 20px; margin: 0 0 24px; }
 .big-fish .rice-balance-card { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
 .big-fish .rice-balance-card h3, .big-fish .rice-balance-card p { margin: 0; }
 .big-fish .rice-balance-value { font-size: clamp(30px, 3.8vw, 46px); color: var(--fish-mint); overflow-wrap: anywhere; }
@@ -4803,6 +4797,18 @@
 .big-fish .rice-share-options { padding: 28px; display: flex; flex-direction: column; gap: 18px; }
 .big-fish .rice-share-options fieldset { border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .big-fish .rice-share-options legend { margin-bottom: 12px; }
+.big-fish .rice-share-options .rice-share-backgrounds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.big-fish .rice-share-background {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 2px;
+  border: 2px solid var(--fish-border);
+  border-radius: 10px;
+  background: var(--fish-soft);
+  cursor: pointer;
+}
+.big-fish .rice-share-background[aria-pressed=true] { border-color: var(--fish-accent); background: var(--fish-accent-soft); }
+.big-fish .rice-share-background img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .big-fish .rice-share-options label { display: grid; gap: 12px; }
 .big-fish .rice-share-footer { margin-top: auto; display: grid; gap: 10px; }
 .big-fish .rice-share-privacy { margin: 0; font-size: 12px; }

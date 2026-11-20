@@ -8,7 +8,7 @@
 // ⚠ 它**验不了**的：真的 followup 到活着会话上会不会开一轮（那个必须在 DSH 里跑），
 //   以及真机上 ctx.sessionTitle 到底给不给标题（这里喂的是假服务）。
 //
-// 跑法： node tests/宿主半边.mjs   （node 20+）
+// 跑法： node tests/host.mjs   （node 20+）
 
 import { mkdtempSync, readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

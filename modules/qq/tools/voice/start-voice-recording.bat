@@ -33,7 +33,7 @@ echo 正在启动……（关掉这个黑窗口 = 停止）
 echo.
 
 set QQ_VOICE_TARGET=%目标QQ%
-node "录语音.mjs" %模式%
+node "record-voice.mjs" %模式%
 
 echo.
 echo 已退出。

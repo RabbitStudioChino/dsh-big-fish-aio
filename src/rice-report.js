@@ -51,10 +51,11 @@ function riceHeat(period, today, days) {
   return { groups, max }
 }
 
-function ricePoster({ summary, days, today, period, name, theme, label }) {
+function ricePoster({ summary, days, today, period, name, theme, label, artwork }) {
   const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d')
   if (!ctx) throw Error('当前浏览器不支持图片生成')
-  canvas.width = 880; canvas.height = period === 'year' ? 1140 : 900
+  // 给右下角的四分之一画幅留出空间，避免插画叠到热点图。
+  canvas.width = 880; canvas.height = period === 'year' ? 1320 : 1020
   const style = getComputedStyle(document.querySelector('.big-fish'))
   const color = key => style.getPropertyValue('--fish-report-' + theme + '-' + key).trim()
   const bg = color('bg'), ink = color('ink'), accent = color('accent'), surface = color('surface')
@@ -65,7 +66,8 @@ function ricePoster({ summary, days, today, period, name, theme, label }) {
   text('用量报告', 48, 126, 42)
   ctx.textAlign = 'right'; text(Array.from(name || '大肥鱼').slice(0, 24).join(''), 832, 72, 22); ctx.textAlign = 'left'
   text(label, 48, 164, 17)
-  box(36, 192, 808, period === 'year' ? 552 : 310)
+  const heatHeight = period === 'year' ? 552 : 310
+  box(36, 192, 808, heatHeight)
   text('TOKEN 热点图 · ' + ({ week: '本周', month: '本月', year: '本年' }[period]), 58, 225, 18)
   const heat = riceHeat(period, today, days)
   heat.groups.forEach((group, index) => {
@@ -81,6 +83,14 @@ function ricePoster({ summary, days, today, period, name, theme, label }) {
   })
   const base = period === 'year' ? 772 : 570
   box(36, base, 808, 228)
+  if (artwork) {
+    const bottom = canvas.height - 16
+    const scale = Math.sqrt((canvas.width * canvas.height / 4) / (artwork.naturalWidth * artwork.naturalHeight))
+    const width = artwork.naturalWidth * scale, height = artwork.naturalHeight * scale
+    ctx.globalAlpha = 0.32
+    ctx.drawImage(artwork, canvas.width - 16 - width, bottom - height, width, height)
+    ctx.globalAlpha = 1
+  }
   text(riceTokens(summary.total), 60, base + 60, 42)
   text('总 Token 数', 60, base + 94, 17)
   ctx.textAlign = 'right'; text('≈ ¥' + summary.cost.toFixed(4), 820, base + 60, 32, accent); text('估算费用', 820, base + 94, 17); ctx.textAlign = 'left'
@@ -125,15 +135,33 @@ function RiceDateRange({ today, from, to, position, onApply, onClose }) {
 }
 function RiceShare({ days, today, onClose }) {
   const [theme, setTheme] = React.useState('ocean'), [period, setPeriod] = React.useState('year'), [name, setName] = React.useState('大肥鱼')
+  const [selections, setSelections] = React.useState({})
+  const [loaded, setLoaded] = React.useState(null)
   const [image, setImage] = React.useState(''), [error, setError] = React.useState(''), [busy, setBusy] = React.useState(false)
   const canvas = React.useRef(null)
+  const backgrounds = RICE_BACKGROUNDS[theme]
+  const background = selections[theme] || backgrounds[0]
+  const artwork = loaded?.url === background ? loaded.artwork : null
+  const artworkError = loaded?.url === background && !artwork
   React.useEffect(() => {
+    let active = true
+    const picture = new Image()
+    picture.src = background
+    picture.decode().then(
+      () => { if (active) setLoaded({ url: background, artwork: picture }) },
+      () => { if (active) setLoaded({ url: background, artwork: null }) },
+    )
+    return () => { active = false }
+  }, [background])
+  React.useLayoutEffect(() => {
+    if (!artwork) { canvas.current = null; setImage(''); setError(''); return }
     try {
       const window = riceWindow(period, today), summary = riceSummary(days, window), label = window.from + ' 至 ' + window.to
-      canvas.current = ricePoster({ summary, days, today, period, name, theme, label }); setImage(canvas.current.toDataURL('image/png')); setError('')
+      canvas.current = ricePoster({ summary, days, today, period, name, theme, label, artwork })
+      setImage(canvas.current.toDataURL('image/png')); setError('')
     }
     catch (e) { canvas.current = null; setImage(''); setError('生成图片失败：' + e.message) }
-  }, [days, today, period, name, theme])
+  }, [days, today, period, name, theme, artwork])
   const exportImage = async copy => {
     setBusy(true); setError('')
     try {
@@ -152,12 +180,17 @@ function RiceShare({ days, today, onClose }) {
   }
   return h(FishModal, { className: 'fish-modal', onCancel: onClose },
     h('div', { className: 'fish-modal-card rice-share-modal', role: 'dialog', 'aria-modal': true, 'aria-label': '分享用量报告' },
-      h('div', { className: 'rice-share-preview' }, image ? h('img', { src: image, alt: '用量报告图片预览' }) : h('p', null, '正在生成图片…')),
+      h('div', { className: 'rice-share-preview' }, image ? h('img', { src: image, alt: '用量报告图片预览' }) : h('p', { role: 'status' }, artworkError ? '背景图片加载失败，请选择其他背景。' : error || '正在生成图片…')),
       h('div', { className: 'rice-share-options' },
         h('div', { className: 'fish-section-head' }, h('h2', null, '分享你的鱼粮手帐'), h('button', { className: 'fish-modal-close', type: 'button', onClick: onClose, 'aria-label': '关闭分享' }, '×')),
         h('p', { className: 'fish-muted' }, '把用量变成一张手帐卡片。'),
         h('label', null, '显示名称', h(FishInput, { value: name, maxLength: 24, onChange: e => setName(e.target.value) })),
         h('fieldset', null, h('legend', null, '报告样式'), ...[['ocean', '大肥鱼'], ['claude', 'Claude'], ['gpt', 'GPT']].map(([key, title]) => h('button', { key, className: 'fish-button' + (theme === key ? ' fish-primary' : ''), type: 'button', 'aria-pressed': theme === key, onClick: () => setTheme(key) }, title))),
+        h('fieldset', { className: 'rice-share-backgrounds' }, h('legend', null, '背景插画'),
+          ...backgrounds.map((url, index) => h('button', {
+            key: url, className: 'rice-share-background', type: 'button', 'aria-label': '背景 ' + (index + 1),
+            'aria-pressed': background === url, onClick: () => setSelections({ ...selections, [theme]: url }),
+          }, h('img', { src: url, alt: '', decoding: 'async' })))),
         h('fieldset', null, h('legend', null, '热点图维度'), ...[['week', '周'], ['month', '月'], ['year', '年']].map(([key, title]) => h('button', { key, className: 'fish-button' + (period === key ? ' fish-primary' : ''), type: 'button', 'aria-pressed': period === key, onClick: () => setPeriod(key) }, title))),
         h('div', { className: 'rice-share-footer' },
         h('div', { className: 'fish-actions rice-share-actions' }, h('button', { type: 'button', className: 'fish-button fish-primary', disabled: busy || !image, onClick: () => exportImage(false) }, '下载 PNG'), h('button', { type: 'button', className: 'fish-button', disabled: busy || !image, onClick: () => exportImage(true) }, '复制图片')),

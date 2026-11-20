@@ -1,6 +1,6 @@
 # 正式发布流程
 
-当前发布版本为 v1.1.0，随包日志为 `update/changelog-v1.1.0.json`。根 `package.json.version` 是唯一版本来源，四个内置模块同版本且 `private: true`，原作者整合基线与完整许可保留。
+当前发布版本为 v1.2.0，随包日志为 `update/changelog-v1.2.0.json`。根 `package.json.version` 是唯一版本来源，四个内置模块同版本且 `private: true`，原作者整合基线与完整许可保留。
 
 ## 发布边界
 

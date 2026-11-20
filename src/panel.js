@@ -5,17 +5,18 @@ const Memory = components['dsh-fish-memory'].Section
 const Mood = components['dsh-feiyu-mood'].Section
 const Speak = components['dsh-speak-up'].Section
 const PANEL_ID = 'big-fish-aio'
-const tabs = ['总览', 'QQ 互通', '长期记忆', '鱼的心情', '主动搭话', '开放平台', '文件管理', '运行日志', '吃大米饭', '更新与来源']
+const tabs = ['总览', 'QQ 互通', '长期记忆', '鱼的心情', '主动搭话', '定时任务', '开放平台', '文件管理', '运行日志', '吃大米饭', '更新与来源']
 const UPDATES_TAB = tabs.length - 1
 const FILE_MANAGER_TAB = tabs.indexOf('文件管理')
-const TAB_ICONS = ['home', 'qq', 'memory', 'mood', 'speak', 'link', 'folder', 'log', 'rice', 'update']
-const TAB_STAMPS = ['封面', '连接', '收藏', '观测', '问候', '接入', '归档', '回声', '米粒', '来处']
+const TAB_ICONS = ['home', 'qq', 'memory', 'mood', 'speak', 'schedule', 'link', 'folder', 'log', 'rice', 'update']
+const TAB_STAMPS = ['封面', '连接', '收藏', '观测', '问候', '提醒', '接入', '归档', '回声', '米粒', '来处']
 const DESCRIPTIONS = [
   '',
   '配置 QQ 连接、会话映射与消息策略。',
   '管理长期记忆、语义检索与召回策略。',
   '查看心情状态、情绪维度及变化记录，配置实例归属、判断模型和上下文注入。',
   '配置主动消息的触发时机、概率与目标会话。',
+  '安排大肥鱼在指定时间向目标会话发送提醒。',
   '接入插件接口并管理会话授权。',
   '统一管理 QQ 图片、QQ 文件和表情包素材。',
   '查看 QQ 互通的实时运行日志。',
@@ -27,7 +28,7 @@ const submenus = {
   2: ['记忆库', 'RAG 语义召回'].map(x => [x, x]),
   3: [['mood', '心情'], ['bind', '会话绑定'], ['judge', '判断与注入'], ['charm', '挂饰']],
 }
-const TAB_ENGLISH = ['OVERVIEW', 'QQ LINK', 'MEMORY', 'MOOD', 'PROACTIVE MESSAGES', 'OPEN PLATFORM', 'FILE MANAGER', 'RUNTIME LOGS', 'TOKEN USAGE', 'UPDATES & SOURCES']
+const TAB_ENGLISH = ['OVERVIEW', 'QQ LINK', 'MEMORY', 'MOOD', 'PROACTIVE MESSAGES', 'SCHEDULED MESSAGES', 'OPEN PLATFORM', 'FILE MANAGER', 'RUNTIME LOGS', 'TOKEN USAGE', 'UPDATES & SOURCES']
 const SUBMENU_ENGLISH = {
   1: ['CONNECTION', 'BINDINGS', 'MESSAGE POLICIES', 'GROUP FREQUENCY', 'ROLES', 'QQ ACCOUNT', 'QQ SPACE', 'STICKERS', 'SPEECH TO TEXT', 'TEXT TO SPEECH', 'IMAGES & FILES', 'CHAT HISTORY'],
   2: ['LIBRARY', 'RAG SEMANTIC RECALL'],
@@ -350,6 +351,7 @@ const ICONS = {
   memory: { paths: ['M12 6.2C10 4.9 7.5 4.5 4 4.8v14c3.5-.3 6 .1 8 1.4 2-1.3 4.5-1.7 8-1.4v-14c-3.5-.3-6 .1-8 1.4Z', 'M12 6.2v14'] },
   mood: { paths: ['M12 20s-7-4.2-7-9.4A3.6 3.6 0 0 1 12 7a3.6 3.6 0 0 1 7 3.6C19 15.8 12 20 12 20Z', 'M7.4 12.1h2.2l1.2-2 1.8 4 1.3-2h2.7'] },
   speak: { paths: ['M4 5.5h16v10H9l-5 4Z', 'M18 2.6l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6Z'], dots: [[8.2, 10.5, 1], [12, 10.5, 1], [15.8, 10.5, 1]] },
+  schedule: { paths: ['M4 6h16v14H4z', 'M4 10h16M8 4v4m8-4v4m-4 5v3h3'] },
   update: { paths: ['M20 12a8 8 0 1 1-2.4-5.7', 'M20 4v4h-4', 'M12 8.4v3.8l2.4 1.4'] },
   refresh: { paths: ['M3 12a9 9 0 0 1 15.36-6.36L21 8', 'M21 3v5h-5', 'M21 12a9 9 0 0 1-15.36 6.36L3 16', 'M3 21v-5h5'] },
   link: { paths: ['M9.4 14.6 14.6 9.4', 'M8.1 11.9 6.5 13.5a3.4 3.4 0 0 0 4.8 4.8l1.6-1.6', 'M15.9 12.1l1.6-1.6a3.4 3.4 0 0 0-4.8-4.8l-1.6 1.6'] },
@@ -705,9 +707,6 @@ function Rice({ notify, active = true } = {}) {
   }
   const tipDay = tip ? byDay.get(tip.date) : null
   return h('div', { className: 'rice-page' },
-    h('div', { className: 'fish-toolbar rice-toolbar' },
-      h('div', null, h('span', { className: 'fish-kicker' }, 'RICE · 每日用量'), h('h2', null, '吃大米饭')),
-      null),
     thresholdOpen ? h(FishModal, { className: 'fish-modal', onClick: event => { if (event.target === event.currentTarget) closeThresholds() }, onKeyDown: event => { if (event.key === 'Escape') { event.preventDefault(); closeThresholds() } } },
       h('form', { className: 'fish-modal-card rice-threshold-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rice-threshold-title', onSubmit: saveThresholds },
         h('span', { className: 'fish-kicker' }, 'RICE · 鱼粮管理'),
@@ -722,7 +721,6 @@ function Rice({ notify, active = true } = {}) {
         thresholdError ? h('p', { className: 'fish-modal-error', role: 'alert' }, thresholdError) : null,
         h('div', { className: 'fish-modal-actions' }, h('button', { type: 'button', className: 'fish-button fish-modal-cancel', disabled: thresholdBusy, onClick: closeThresholds }, '关闭'),
           h('button', { type: 'submit', className: 'fish-button fish-primary', disabled: thresholdBusy }, thresholdBusy ? '保存中…' : '保存')))) : null,
-    h('p', { className: 'fish-muted' }, '统计当前绑定工作区（' + (data?.工作区?.path || '读取中…') + '）的会话与 RAG 用量。RAG 按实际请求记录，含索引构建和查询，缓存复用不新增调用。'),
     error ? h('p', { className: 'fish-modal-error', role: 'alert' }, error) : null,
     h('div', { className: 'rice-dashboard' },
       h('article', { className: 'fish-card rice-balance-card' },
@@ -1063,8 +1061,29 @@ function readSavedLocation() {
       const key = saved.subpage && saved.subpage[id]
       if (typeof key === 'string' && (submenus[id] || []).some(pair => Array.isArray(pair) && pair[0] === key)) sub[id] = key
     }
-    return { tab: saved.tabLabel ? Math.max(0, tabs.indexOf(saved.tabLabel)) : saved.tab === 8 ? UPDATES_TAB : saved.tab === 5 ? tabs.indexOf('吃大米饭') : saved.tab, subpage: sub }
+    const legacy = ['总览', 'QQ 互通', '长期记忆', '鱼的心情', '主动搭话', '吃大米饭', '文件管理', '运行日志', '更新与来源', '更新与来源']
+    return { tab: Math.max(0, tabs.indexOf(saved.tabLabel || legacy[saved.tab])), subpage: sub }
   } catch (error) { return null }
+}
+
+function flashJumpTarget(id) {
+  let tries = 0, timer, target
+  const tick = () => {
+    const el = typeof document !== 'undefined' ? document.getElementById(id) : null
+    if (el && el.getClientRects().length) {
+      target = el
+      const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth', block: 'center' })
+      el.classList.remove('fish-jump-flash')
+      void el.offsetWidth
+      el.classList.add('fish-jump-flash')
+      timer = setTimeout(() => el.classList.remove('fish-jump-flash'), 1500)
+      return
+    }
+    if (++tries < 50) timer = setTimeout(tick, 80)
+  }
+  timer = setTimeout(tick, 50)
+  return () => { clearTimeout(timer); target?.classList.remove('fish-jump-flash') }
 }
 
 function Page() {
@@ -1076,6 +1095,7 @@ function Page() {
   const [qqStatus, setQQStatus] = React.useState(null)
   const [versionInfo, setVersionInfo] = React.useState(null)
   const [updateAvailable, setUpdateAvailable] = React.useState(Boolean(FISH_UPDATE.result?.hasUpdate))
+  const [revealSchedule, setRevealSchedule] = React.useState(false)
   React.useEffect(() => {
     const receive = result => setUpdateAvailable(Boolean(result?.hasUpdate))
     FISH_UPDATE.listeners.add(receive)
@@ -1100,9 +1120,9 @@ function Page() {
     }
     action()
   }
-  const navigate = id => {
+  const navigate = (id, reveal = false) => {
     if (id === tab) return
-    requestLeave(() => animateChange(() => { setTab(id); setVisited(old => old.includes(id) ? old : [...old, id]) }))
+    requestLeave(() => animateChange(() => { setRevealSchedule(reveal); setTab(id); setVisited(old => old.includes(id) ? old : [...old, id]) }))
   }
   const selectSubpage = (id, key) => {
     const current = subpage[id]
@@ -1111,22 +1131,6 @@ function Page() {
       setTab(id); setVisited(old => old.includes(id) ? old : [...old, id])
       setSubpage(old => ({ ...old, [id]: key }))
     }))
-  }
-  const flashJumpTarget = (id) => {
-    let tries = 0
-    const tick = () => {
-      const el = typeof document !== 'undefined' ? document.getElementById(id) : null
-      if (el && el.getClientRects().length) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        el.classList.remove('fish-jump-flash')
-        void el.offsetWidth
-        el.classList.add('fish-jump-flash')
-        setTimeout(() => el.classList.remove('fish-jump-flash'), 1500)
-        return
-      }
-      if (++tries < 50) setTimeout(tick, 80)
-    }
-    setTimeout(tick, 50)
   }
   const openFileManager = () => {
     navigate(FILE_MANAGER_TAB)
@@ -1208,7 +1212,9 @@ function Page() {
     () => h(QQ, { page: subpage[1], onPageChange: key => selectSubpage(1, key), guard: qqGuard, notify: fishNotify, help: fishShowHelp, hideHelp: fishHideHelp, laterHideHelp: fishScheduleHelpHide, confirm: fishAskConfirm, confirmRice: fishAskRiceResume, editRole: fishAskText, openRoleWriter: fishOpenRoleWriter, openFileManager }),
     () => h(Memory, { page: subpage[2], onPageChange: key => selectSubpage(2, key), notify: fishNotify, active: tab === 2 }),
     () => h(Mood, { page: subpage[3], onPageChange: key => selectSubpage(3, key), notify: fishNotify, Dialog: components['dsh-fish-memory'].MemoryDialog }),
-    () => h(Speak, { guard: speakGuard, notify: fishNotify }), () => h(OpenPlatform, { notify: fishNotify }), () => h(FileManager, { notify: fishNotify }), () => h(RunLog, { notify: fishNotify }), () => h(Rice, { notify: fishNotify, active: tab === tabs.indexOf('吃大米饭') }), () => h(Updates, { notify: fishNotify, versionInfo, onVersionInfo: setVersionInfo }),
+    () => h(Speak, { guard: speakGuard, notify: fishNotify }),
+    () => h(ScheduledMessages, { active: tab === tabs.indexOf('定时任务'), openPlatform: () => navigate(tabs.indexOf('开放平台'), true), notify: fishNotify }),
+    () => h(OpenPlatform, { notify: fishNotify, revealSchedule: tab === tabs.indexOf('开放平台') && revealSchedule }), () => h(FileManager, { notify: fishNotify }), () => h(RunLog, { notify: fishNotify }), () => h(Rice, { notify: fishNotify, active: tab === tabs.indexOf('吃大米饭') }), () => h(Updates, { notify: fishNotify, versionInfo, onVersionInfo: setVersionInfo }),
   ]
   const connected = Boolean(qqStatus?.用户 && !qqStatus?.错)
   const connection = !qqStatus ? '正在读取 QQ 连接…' : qqStatus?.错 ? 'QQ 连接读取失败' : connected ? 'QQ 已连接 · ' + (qqStatus.昵称 || '伙伴') + ' · ' + qqStatus.用户 : 'QQ 未连接'

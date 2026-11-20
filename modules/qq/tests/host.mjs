@@ -5,7 +5,7 @@
 //   3) interrupted 那轮不发；turn/end 不是 completed 不发
 //   4) 试运行开着 → 不真发（fetch 不被打）；总开关关着 → 不真发
 //   5) /state 路由能回出配置和 NapCat 探活结果
-// 跑法： node tests/宿主半边.mjs
+// 跑法： node tests/host.mjs
 
 import { mkdtempSync, writeFileSync as 原写文件, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

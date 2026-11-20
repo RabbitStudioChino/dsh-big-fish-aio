@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, statSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -23,7 +23,7 @@ function fixture(t) {
   return { home, root, config: join(home, 'big-fish-update.json'), updater: createSelfUpdate({ packageRoot: root }) }
 }
 
-function privateRemote(t) {
+function privateRemote(t, archiveSize = 0) {
   const commands = [], requests = []
   let commit = COMMIT, remoteMeta = META
   let failure = false
@@ -46,7 +46,11 @@ function privateRemote(t) {
       return callback(null, commit + '\trefs/heads/main\n', '')
     }
     if (args.includes('show')) return callback(null, JSON.stringify(remoteMeta), '')
-    if (args.includes('archive')) writeFileSync(args[args.indexOf('-o') + 1], 'private archive')
+    if (args.includes('archive')) {
+      const archive = args[args.indexOf('-o') + 1]
+      writeFileSync(archive, 'private archive')
+      if (archiveSize) truncateSync(archive, archiveSize)
+    }
     callback(null, '', '')
   })
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -120,14 +124,15 @@ test('内测固定读取 main，失败鉴权保留原 Token 且不回显凭据',
   assert.ok(!timeout.error.includes(TOKEN))
 })
 
-test('内测安装固定提交、校验包并清理临时归档；来源跨重启保留，失败安装不修改来源', async t => {
+test('内测安装固定提交、接受大于 32 MiB 的归档并清理临时文件；失败不修改来源', async t => {
   const { updater, root } = fixture(t)
-  const remote = privateRemote(t)
+  const archiveSize = 33 * 1024 * 1024
+  const remote = privateRemote(t, archiveSize)
   await updater.configureBeta({ token: TOKEN })
   let archive, accepted = false
   const ctx = { pluginManager: { installBundle: async path => {
     archive = path
-    assert.equal(readFileSync(path, 'utf8'), 'private archive')
+    assert.equal(statSync(path).size, archiveSize)
     return { applied: accepted }
   } } }
   assert.equal((await updater.install(ctx, 'beta')).confirmationRequired, true)

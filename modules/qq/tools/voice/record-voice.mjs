@@ -11,7 +11,7 @@ import os from 'node:os'
 
 // ─────────────────────────── 配置（都能改） ───────────────────────────
 // 模式：1 = 切断发（边录边发，念一段发一段）；2 = 完整发（录完整段，只发一条）
-// 用法：node 录语音.mjs 1   /   node 录语音.mjs 2   （也可以用环境变量 QQ_VOICE_MODE）
+// 用法：node record-voice.mjs 1   /   node record-voice.mjs 2   （也可以用环境变量 QQ_VOICE_MODE）
 const 模式 = String(process.argv[2] || process.env.QQ_VOICE_MODE || '1').trim() === '2' ? 2 : 1
 const 模式名 = 模式 === 2 ? '完整发（录完再发一条）' : '切断发（边录边发）'
 
@@ -21,7 +21,7 @@ const QQ后端 = process.env.QQ_BACKEND || 'http://127.0.0.1:3000'
 const 私聊QQ = process.env.QQ_VOICE_TARGET || ''
 
 // 录音脚本：默认跟本文件放同一目录
-const 录音脚本 = process.env.RECORDER_PS1 || path.join(import.meta.dirname, '录音回环.ps1')
+const 录音脚本 = process.env.RECORDER_PS1 || path.join(import.meta.dirname, 'record-loopback.ps1')
 // 分段/成品放哪
 const 输出目录 = process.env.VOICE_OUT_DIR || path.join(os.homedir(), 'Desktop', 'AI语音')
 const 停文件 = path.join(os.tmpdir(), 'qqrec-stop.txt')

@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 import { themePaletteCSS } from '../lib/theme-palette.mjs'
-import { bigfishImages, bigfishImageUrl } from '../lib/bigfish-assets.mjs'
+import { bigfishImages, bigfishImageUrl, reportBackgrounds, reportBackgroundUrl } from '../lib/bigfish-assets.mjs'
+import { scheduleRepeats } from '../lib/schedule-calendar.mjs'
 
 const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
@@ -14,6 +15,7 @@ const output = `// 自动生成：修改 src/panel.js 或 modules/*/lib/client.j
   `if (typeof document !== 'undefined' && document.body) { try {\n` + read('modules/mood/assets/widget.js') +
   `\n} catch (error) { delete window.__feiyuMoodVersion; console.warn('[大肥鱼] 挂饰初始化失败', error) } }\n` +
   `const BIGFISH_IMAGES = ${JSON.stringify(bigfishImages.map(bigfishImageUrl))};\n` +
+  `const RICE_BACKGROUNDS = ${JSON.stringify(Object.fromEntries(Object.entries(reportBackgrounds).map(([theme, assets]) => [theme, assets.map(reportBackgroundUrl)])))};\n` +
   `const components = {};\nconst moduleLoader = { load({id, factory}) { components[id] = factory(require) } };\n` +
   read('src/stickers.js') + '\n' +
   read('src/qq-storage.js') + '\n' +
@@ -29,6 +31,8 @@ const output = `// 自动生成：修改 src/panel.js 或 modules/*/lib/client.j
     read('lib/' + name + '.mjs').replace(/^import .*\n/gm, '').replaceAll('export function ', 'function ') + '\n').join('') +
   `const PLATFORM_PLUGIN_PROMPT = ${JSON.stringify(read('docs/open-platform-plugin-prompt.md'))};\n` +
   read('src/open-platform.js') + '\n' +
+  `const SCHEDULE_REPEATS = ${JSON.stringify(scheduleRepeats)};\n` +
+  read('src/scheduled-messages.js') + '\n' +
   read('src/notifications.js') + '\n' +
   read('src/rice-report.js') + '\n' +
   read('src/panel.js') + '\n} });\n'

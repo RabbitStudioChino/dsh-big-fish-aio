@@ -90,7 +90,7 @@ function PlatformProvider({ provider, sessions, onRefresh, notify }) {
     finally { saving.current = false; setBusy(false) }
   }
   const remove = async () => {
-    if (saving.current) return
+    if (saving.current || provider.removable === false) return
     saving.current = true
     setBusy(true)
     try {
@@ -108,7 +108,7 @@ function PlatformProvider({ provider, sessions, onRefresh, notify }) {
     finally { saving.current = false; setBusy(false) }
   }
   return h(React.Fragment, null,
-    h('article', { className: 'fish-card platform-provider-card' },
+    h('article', { className: 'fish-card platform-provider-card', id: 'fish-platform-card-' + provider.id },
       h('button', { type: 'button', className: 'platform-provider-open', 'aria-haspopup': 'dialog', onClick: () => { setSelectedId(null); setOpen(true) } },
       h('span', { className: 'platform-provider-title' }, provider.title),
       h('span', { className: 'platform-provider-description' }, provider.description),
@@ -121,7 +121,7 @@ function PlatformProvider({ provider, sessions, onRefresh, notify }) {
       h('header', { className: 'memory-dialog-head' },
         h('div', null, h('p', null, provider.id + ' · v' + provider.version), h('h2', { id: 'platform-provider-' + provider.id }, provider.title)),
         h('div', { className: 'platform-provider-actions' },
-          h('button', { type: 'button', className: 'fish-button fish-danger', disabled: busy, onClick: remove }, '删除'),
+          provider.removable !== false ? h('button', { type: 'button', className: 'fish-button fish-danger', disabled: busy, onClick: remove }, '删除') : null,
           h('button', { type: 'button', className: 'fish-modal-close', 'aria-label': '关闭' + provider.title, disabled: busy, onClick: () => setOpen(false), autoFocus: true }, '×'))),
       h('div', { className: 'platform-provider-workspace' },
         h('aside', { className: 'platform-provider-sidebar', 'aria-label': '接入设置与接口列表' },
@@ -496,7 +496,7 @@ function PlatformGuide({ onClose }) {
             ['GET /openapi.json', '生成全部已注册接口的 OpenAPI 3.1 文档', '返回 openapi、info、paths'],
             ['POST /apis', '导入原生引用或外部 HTTP 清单', '原生引用为 schemaVersion、transport、id'],
             ['POST /connect', '保存接入、会话授权与隔离设置', 'providerId、enabled、sessionIds，可选 sessionIsolation'],
-            ['POST /remove', '移除卡片并撤销授权，保留配置与业务数据', 'providerId，恢复需重新导入和授权'],
+            ['POST /remove', '移除非内置卡片并撤销授权，保留配置与业务数据', 'providerId，恢复需重新导入和授权'],
             ['POST /invoke/{providerId}/{operationId}', '调用指定处理器', '业务参数 → 统一响应'],
           ] }),
           h(PlatformGuideTable, { label: '查询接口调用约定', columns: ['项目', '值／限制', '说明'], rows: [
@@ -562,7 +562,7 @@ function PlatformPrompt({ onClose, notify }) {
       h('button', { type: 'button', className: 'fish-button fish-primary', onClick: copy }, '复制 Prompt')))
 }
 
-function OpenPlatform({ notify }) {
+function OpenPlatform({ notify, revealSchedule }) {
   const [catalog, setCatalog] = React.useState(null)
   const [error, setError] = React.useState('')
   const [query, setQuery] = React.useState('')
@@ -580,6 +580,12 @@ function OpenPlatform({ notify }) {
     finally { refreshInFlight.current = false; setRefreshing(false) }
   }
   React.useEffect(() => { refresh() }, [])
+  const hasSchedule = catalog?.providers?.some(provider => provider.id === 'schedule')
+  React.useEffect(() => {
+    if (!revealSchedule || !hasSchedule) return
+    setQuery('')
+    return flashJumpTarget('fish-platform-card-schedule')
+  }, [revealSchedule, hasSchedule])
   const providers = (catalog?.providers || []).filter(provider => (provider.title + provider.description + provider.operations.map(operation => operation.title).join(' ')).toLowerCase().includes(query.toLowerCase()))
   return h('div', { className: 'platform-page' },
     h('div', { className: 'platform-toolbar' },

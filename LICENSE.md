@@ -20,6 +20,6 @@
 第三方资料：
 
 - Qwen Embedding 实现参考 [Aonysen/dsh-memory-rag](https://github.com/Aonysen/dsh-memory-rag/tree/9527a91f49863e7f16e109335e44b137e436dc41)，Copyright 2026 aonysen，Apache-2.0；原有许可和 NOTICE 位于 `modules/memory/lib/notices/`。该项目是源码参考，不是整合包的运行依赖。
-- 中文词典与词频来自 [fxsjy/jieba](https://github.com/fxsjy/jieba)，Copyright (c) 2013 Sun Junyi，MIT；保留 `词典-来源.txt`，并随包补充分发 `modules/memory/lib/notices/jieba-LICENSE`。
+- 中文词典与词频来自 [fxsjy/jieba](https://github.com/fxsjy/jieba)，Copyright (c) 2013 Sun Junyi，MIT；保留 `dictionary-source.txt`，并随包补充分发 `modules/memory/lib/notices/jieba-LICENSE`。
 
 发布、介绍、截图和视频引用请同时保留上述原作者署名与项目地址。详见 [LICENSE](LICENSE)。

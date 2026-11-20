@@ -13,6 +13,31 @@ function assertGuideSections(tree) {
   }
 }
 
+test('从定时任务进入开放平台时，等目录加载后清除搜索并定位定时任务卡片', () => {
+  const states = [null, '', '账户余额'], flashes = []
+  let cursor = 0, revealEffect
+  const sandbox = {
+    h: (type, props, ...children) => ({ type, props, children }),
+    React: {
+      useState(value) { const i = cursor++; if (!(i in states)) states[i] = value; return [states[i], next => { states[i] = next }] },
+      useRef(value) { return { current: value } },
+      useEffect(effect, deps) { if (deps.length) revealEffect = effect },
+    },
+    flashJumpTarget(id) { flashes.push(id) },
+  }
+  const render = vm.runInNewContext(source + '\nOpenPlatform', sandbox)
+  const draw = revealSchedule => { cursor = 0; const tree = render({ notify() {}, revealSchedule }); revealEffect(); return tree }
+  draw(true)
+  assert.deepEqual(flashes, [])
+  states[0] = { providers: [{ id: 'schedule', title: '定时任务', description: '', operations: [] }], sessions: [] }
+  draw(false)
+  assert.equal(states[2], '账户余额')
+  draw(true)
+  assert.equal(states[2], '')
+  assert.deepEqual(flashes, ['fish-platform-card-schedule'])
+  assert.ok(walk(draw(false)).some(node => node.props?.provider?.id === 'schedule'))
+})
+
 test('信息卡片打开配置模态框，会话开关即时保存并处理失败和重复操作', async () => {
   const states = [], refs = [], requests = [], notices = [], effects = []
   let cursor = 0, refCursor = 0, failed = false, release = null
@@ -47,6 +72,7 @@ test('信息卡片打开配置模态框，会话开关即时保存并处理失�
   let tree = render()
   const card = tree.children[0]
   assert.equal(card.type, 'article')
+  assert.equal(card.props.id, 'fish-platform-card-test')
   const opener = card.children[0]
   assert.equal(opener.type, 'button'); assert.equal(opener.props['aria-haspopup'], 'dialog')
   assert.equal(walk(opener).some(node => node.type === 'input' || node.type === sandbox.Operation), false)
@@ -57,6 +83,12 @@ test('信息卡片打开配置模态框，会话开关即时保存并处理失�
   assert.equal(dialog.open, true)
   let modal = tree.children[1]
   assert.equal(modal.type, 'dialog'); assert.ok(modal.props['aria-labelledby'])
+  const actionButtons = () => walk(render().children[1])
+    .find(node => node.props?.className === 'platform-provider-actions').children.filter(Boolean).map(node => node.children[0])
+  assert.deepEqual(actionButtons(), ['删除', '×'])
+  provider = { ...provider, removable: false }
+  assert.deepEqual(actionButtons(), ['×'])
+  provider = { ...provider, removable: true }
   assert.equal(walk(modal).some(node => node.type === sandbox.Operation), false)
   assert.ok(JSON.stringify(modal).includes('选择一个接口'))
   walk(modal).find(node => node.type === 'button' && node.props?.['aria-controls'] === 'platform-detail-test').props.onClick()

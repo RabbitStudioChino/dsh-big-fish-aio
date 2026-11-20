@@ -5,6 +5,7 @@ import * as speak from './modules/speak/lib/host.js'
 import { createSelfUpdate } from './lib/selfupdate.mjs'
 import { fileURLToPath } from 'node:url'
 import { createOpenPlatform } from './lib/open-platform.mjs'
+import { createScheduledMessages } from './lib/scheduled-messages.mjs'
 
 import { registerBigfishAssets } from './lib/bigfish-assets.mjs'
 
@@ -13,7 +14,7 @@ export const inject = [...new Set([...memory.inject, ...qq.inject, ...mood.injec
 
 export function apply(ctx) {
   registerBigfishAssets(ctx)
-  createOpenPlatform(ctx, { readFeatures(execution) {
+  createOpenPlatform(ctx, { schedule: createScheduledMessages(ctx), readFeatures(execution) {
     const sid = execution.sessionId || ''
     const agents = ctx.agents?.list?.() || []
     const session = sid ? agents.find(agent => String(agent.session?.id || agent.id) === sid)?.session || ctx.sessions?.get?.(sid) : undefined

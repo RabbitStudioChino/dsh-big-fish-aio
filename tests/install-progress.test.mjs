@@ -6,12 +6,13 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { createSelfUpdate } from '../lib/selfupdate.mjs'
-test('更新进度经过下载、宿主安装和完成，状态接口受管理鉴权保护', async t => {
+test('更新进度经过下载、宿主安装和完成，状态接口受管理鉴权保护', { timeout: 5000 }, async t => {
   const home = mkdtempSync(join(tmpdir(), 'fish-install-progress-')), root = join(home, 'node_modules', 'dsh-big-fish-aio')
   mkdirSync(root, { recursive: true }); writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'dsh-big-fish-aio', version: '0.0.1' }))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const bytes = Buffer.from('test archive bytes'), routes = new Map()
-  let stream, finishInstall, denied = false
+  let stream, notifyHost, denied = false
+  const hostStarted = new Promise(resolve => { notifyHost = resolve })
   t.mock.method(globalThis, 'fetch', async url => {
     if (String(url).endsWith('/latest')) return Response.json({ name: 'dsh-big-fish-aio', version: '0.0.2', dist: { integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64') } })
     return new Response(new ReadableStream({ start(controller) { stream = controller; controller.enqueue(bytes.subarray(0, 5)) } }), { headers: { 'content-length': String(bytes.length) } })
@@ -19,7 +20,7 @@ test('更新进度经过下载、宿主安装和完成，状态接口受管理�
   const updater = createSelfUpdate({ packageRoot: root })
   updater.register({ effect: fn => fn(), webServer: { register: route => routes.set(route.path, route.handler) },
     get: name => name === 'connection' ? { requestRejection: () => denied ? 401 : null } : undefined,
-    pluginManager: { installBundle: () => new Promise(resolve => { finishInstall = resolve }) },
+    pluginManager: { installBundle: () => new Promise(resolve => { notifyHost(resolve) }) },
   }, '/fish')
   const invoke = async (path, method = 'GET', body = {}) => {
     const req = Readable.from([JSON.stringify(body)])
@@ -35,8 +36,7 @@ test('更新进度经过下载、宿主安装和完成，状态接口受管理�
   assert.equal(status.data.operationId, 'job-1'); assert.equal(status.data.active, true)
   assert.ok(status.data.progress >= 10 && status.data.progress < 70)
   stream.enqueue(bytes.subarray(5)); stream.close()
-  for (let i = 0; i < 100 && !finishInstall; i++) await new Promise(setImmediate)
-  assert.ok(finishInstall)
+  const finishInstall = await Promise.race([hostStarted, pending.then(({ data }) => assert.fail(data.error || '未调用宿主安装'))])
   status = await invoke('/fish/install-status'); assert.equal(status.data.progress, 80)
   assert.ok(!JSON.stringify(status).includes(home))
   finishInstall({ application: 'applied', changed: true }); assert.equal((await pending).data.ok, true)

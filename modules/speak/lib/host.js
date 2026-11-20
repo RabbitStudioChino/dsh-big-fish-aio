@@ -206,7 +206,7 @@ function 会话id列表(值) {
  *   修法：**存什么不改，比较和去重用「去掉 session- 前缀的那个键」**。
  *   这样两种写法算同一个会话，也不会硬把别人的 id 改成另一种形状。
  */
-function 会话键(v) {
+export function 会话键(v) {
   const s = String(v == null ? '' : v).trim()
   return s.startsWith('session-') ? s.slice('session-'.length) : s
 }
@@ -278,14 +278,14 @@ function 写配置(配置) {
 }
 
 /** 只信绑定工作区的成员表，旧目标保留在配置里供取消，但不能越界投递。 */
-export function 搭话工作区(ctx) {
+export function 搭话工作区(ctx, home = 目录) {
   try {
-    const binding = createWorkspaceBinding({ home: 目录, ctx })
+    const binding = createWorkspaceBinding({ home, ctx })
     const id = binding.id()
     const path = binding.directory(id)
     const registry = ctx.workspaceRegistry || ctx.get?.('workspaceRegistry')
     const workspace = registry?.get?.(id)
-    const stored = workspace || JSON.parse(readFileSync(join(目录, 'storages/workspace.json'), 'utf8')).tables?.workspaces?.[id]
+    const stored = workspace || JSON.parse(readFileSync(join(home, 'storages/workspace.json'), 'utf8')).tables?.workspaces?.[id]
     const archived = new Set((registry?.archivedSessionIds || []).map(会话键))
     const sessions = (stored?.sessionIds || []).map(String).filter(sid => !archived.has(会话键(sid)))
     return { id, path, sessions, members: new Set(sessions.map(会话键)) }
@@ -390,7 +390,7 @@ const 峰时窗口们 = [
  *   一来测试能喂假时间（半夜跑测试不能红），二来算命中线那一步可以复用同一个时刻。
  * ⚠ 边界：09:00 算峰、12:00 算谷、14:00 算峰、18:00 算谷（含起不含止）。
  * ⚠ 周六周日**直接 false**（全天谷时），先判周末再算分钟，别把顺序写反。
- * ⚠ 导出只是为了 tests/宿主半边.mjs 能直接断言（跟官方 goal-round-driver 导出
+ * ⚠ 导出只是为了 tests/host.mjs 能直接断言（跟官方 goal-round-driver 导出
  *   renderGoalRoundPrompt 是一个意思），插件本身不需要它对外。
  * @param 某时刻 Date（不传就是现在）
  * @param 时区 IANA 时区名（空 = 本机时区）
@@ -425,7 +425,7 @@ export function 算基础命中线(配置, 某时刻 = new Date()) {
  * ⚠ 加成是"攒"出来的：每没掷中一次 +「没中加成」，加到「加成上限」就停；
  *   掷中（含试运行掷中）会把「连没中」清零，也就是"回到一开始"。
  * ⚠ 这是**纯函数**（连没中从外面喂），所以测试能把 0/1/2/3… 各种情况都验一遍，
- *   不用去跟随机数较劲；导出只是为了 tests/宿主半边.mjs 能直接断言。
+ *   不用去跟随机数较劲；导出只是为了 tests/host.mjs 能直接断言。
  * @param 基础命中线 峰时或谷时那一格（%）
  * @param 因子 时机因子
  * @param 连没中 连着几次没掷中
@@ -485,7 +485,7 @@ function 短id(id) {
  *   但"id 到底带不带前缀"这件事她以前踩过坑（前缀被拼了两次），所以这里**两个方向都兜住**：
  *   原样 → 带前缀 → 去前缀，哪个能拿到 agent 就用哪个。多试一次不多花钱，猜错一次要她排查半天。
  */
-function 找agent(ctx, id) {
+export function 找agent(ctx, id) {
   const 原 = String(id == null ? '' : id).trim()
   if (原 === '') return undefined
   const 候选 = [原]
@@ -660,7 +660,7 @@ function 造执行体(ctx) {
         const e = 事件们[i]
         if (!e || e.type !== 'user/message') continue
         const 来源 = e.data && e.data.source
-        if (来源 && 来源.kind === 源标记) continue
+        if (来源?.kind === 源标记 || 来源?.kind === 'big-fish-schedule') continue
         她上次说话.set(sid, e.time)
         return (Date.now() - e.time) / 60000
       }
@@ -934,7 +934,7 @@ function 造执行体(ctx) {
       if (!event) return
       if (event.type === 'user/message') {
         const 来源 = event.data && event.data.source
-        if (来源 && 来源.kind === 源标记) return
+        if (来源?.kind === 源标记 || 来源?.kind === 'big-fish-schedule') return
         她上次说话.set(String(session.id), event.time)
         return
       }
@@ -1054,7 +1054,7 @@ function 读投影缓存标题(id) {
  * @param id 会话 id
  * @param 会话 ctx.sessions.get(id) 拿回来的 Session 对象（有就走第一条路）
  */
-function 取标题(ctx, id, 会话) {
+export function 取标题(ctx, id, 会话) {
   // 第一条路：会话标题服务（纯内存、不读盘、改了名字马上能看到 → 不缓存）
   try {
     const 标题服务 = ctx.get('sessionTitle')

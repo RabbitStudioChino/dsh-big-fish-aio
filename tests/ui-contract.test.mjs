@@ -6,7 +6,37 @@ import { readFileSync } from 'node:fs'
 const read = name => readFileSync(new URL('../' + name, import.meta.url), 'utf8')
 const walk = node => !node || typeof node !== 'object' ? [] : [node, ...(node.children || []).flat(Infinity).flatMap(walk)]
 
-test('十入口支持图标、键盘切换及已访问面板保留', () => {
+test('定时任务开关提交当前任务 ID，刷新后显示停用或开启状态', async () => {
+  const data = { workspaceId: 'fish', sessions: [], tasks: [{ id: 'task', sessionId: 'session', message: '带伞', repeat: 'daily', enabled: true, nextAt: 1, status: 'pending' }] }
+  const states = [data], requests = [], notices = []
+  let cursor = 0
+  const render = vm.runInNewContext(read('src/scheduled-messages.js') + '\nScheduledMessages', {
+    h: (type, props, ...children) => ({ type, props, children }), button: () => null, FishSwitch() {}, SCHEDULE_REPEATS: { daily: '每天' },
+    React: {
+      useState(value) { const i = cursor++; if (!(i in states)) states[i] = value; return [states[i], next => { states[i] = next }] },
+      useEffect() {}, useRef: value => ({ current: value }),
+    },
+    async platformRequest(path, input) {
+      if (path === '/scheduled-messages') return structuredClone(data)
+      requests.push({ path, input: { ...input } })
+      data.tasks[0].enabled = input.enabled
+      return { ok: true }
+    },
+  })
+  const draw = () => { cursor = 0; return walk(render({ notify: message => notices.push(message) })) }
+  const toggle = tree => tree.find(node => node.type?.name === 'FishSwitch')
+  assert.equal(toggle(draw()).props.checked, true)
+  await toggle(draw()).props.onChange({ target: { checked: false } })
+  assert.deepEqual(requests[0], { path: '/scheduled-messages/enabled', input: { id: 'task', enabled: false } })
+  const paused = draw()
+  assert.equal(toggle(paused).props.checked, false)
+  assert.ok(paused.some(node => node.children.includes('已停用')))
+  await toggle(paused).props.onChange({ target: { checked: true } })
+  assert.equal(toggle(draw()).props.checked, true)
+  assert.equal(notices.at(-1), '定时任务已开启。')
+})
+
+test('页签支持图标、键盘切换及已访问面板保留', () => {
   const state = [], registrations = []
   let index = 0, plugin
   const React = {
@@ -28,7 +58,7 @@ test('十入口支持图标、键盘切换及已访问面板保留', () => {
   const Page = registrations.find(item => item.slot.name === 'main').Component
   const render = () => { index = 0; return walk(Page()) }
   let tree = render(), tabs = tree.filter(n => n.props?.role === 'tab')
-  assert.deepEqual(tabs.map(t => t.props['aria-label']), ['总览', 'QQ 互通', '长期记忆', '鱼的心情', '主动搭话', '开放平台', '文件管理', '运行日志', '吃大米饭', '更新与来源'])
+  assert.deepEqual(tabs.map(t => t.props['aria-label']), ['总览', 'QQ 互通', '长期记忆', '鱼的心情', '主动搭话', '定时任务', '开放平台', '文件管理', '运行日志', '吃大米饭', '更新与来源'])
   const overview = tree.find(n => n.props?.id === 'fish-panel-0').children[0]
   const overviewTree = walk(overview.type(overview.props))
   const welcome = overviewTree.find(n => n.props?.className === 'fish-welcome')
@@ -91,12 +121,12 @@ test('十入口支持图标、键盘切换及已访问面板保留', () => {
     currentTarget: { closest: () => ({ querySelectorAll: () => tabs.map((_, i) => ({ focus() { focused = i } })) }) },
   })
   tree = render()
-  assert.equal(focused, 9)
+  assert.equal(focused, tabs.length - 1)
   assert.equal(prevented, true)
-  assert.equal(tree.find(n => n.props?.id === 'fish-tab-9').props['aria-selected'], true)
+  assert.equal(tree.find(n => n.props?.id === 'fish-tab-10').props['aria-selected'], true)
   assert.equal(tree.filter(n => n.props?.role === 'tabpanel').length, 4)
   assert.equal(tree.find(n => n.props?.id === 'fish-panel-1').props.hidden, true)
-  for (const [key, expected] of [['Home', 0], ['ArrowLeft', 9], ['ArrowRight', 0], ['ArrowDown', 1], ['ArrowUp', 0]]) {
+  for (const [key, expected] of [['Home', 0], ['ArrowLeft', tabs.length - 1], ['ArrowRight', 0], ['ArrowDown', 1], ['ArrowUp', 0]]) {
     tabs = tree.filter(n => n.props?.role === 'tab')
     const active = tabs.find(n => n.props['aria-selected'])
     active.props.onKeyDown({ key, preventDefault() {}, currentTarget: { closest: () => ({ querySelectorAll: () => tabs.map((_, i) => ({ focus() { focused = i } })) }) } })
@@ -104,7 +134,13 @@ test('十入口支持图标、键盘切换及已访问面板保留', () => {
     assert.equal(focused, expected)
     assert.equal(tree.find(n => n.props?.id === 'fish-tab-' + expected).props['aria-selected'], true)
   }
-
+  tree.find(node => node.props?.['aria-label'] === '定时任务' && node.props.role === 'tab').props.onClick()
+  render().find(node => node.type?.name === 'ScheduledMessages').props.openPlatform()
+  tree = render()
+  assert.equal(tree.find(node => node.props?.['aria-label'] === '开放平台' && node.props.role === 'tab').props['aria-selected'], true)
+  assert.equal(tree.find(node => node.type?.name === 'OpenPlatform').props.revealSchedule, true)
+  tree.find(node => node.props?.['aria-label'] === '总览' && node.props.role === 'tab').props.onClick()
+  assert.equal(render().find(node => node.type?.name === 'OpenPlatform').props.revealSchedule, false)
 })
 
 test('下拉菜单上下展开均直接贴合选择框，浮层使用顶层 popover 并挂载到所属模态框', () => {
@@ -160,10 +196,10 @@ test('导航重排后仍按名称恢复页面，兼容旧数字页签', () => {
   const locationSource = source.slice(source.indexOf('const tabs ='), source.indexOf('const css =')) +
     source.slice(source.indexOf('const LOCATION_KEY ='), source.indexOf('\nfunction Page()'))
   for (const [saved, expected] of [
-    [{ tab: 8, tabLabel: '开放平台' }, 5],
-    [{ tab: 5, tabLabel: '吃大米饭' }, 8],
-    [{ tab: 5 }, 8],
-    [{ tab: 8 }, 9],
+    [{ tab: 8, tabLabel: '开放平台' }, 6],
+    [{ tab: 5, tabLabel: '吃大米饭' }, 9],
+    [{ tab: 5 }, 9],
+    [{ tab: 8 }, 10],
   ]) {
     const actual = vm.runInNewContext(locationSource + '\nreadSavedLocation().tab', {
       window: { localStorage: { getItem: () => JSON.stringify(saved) } },

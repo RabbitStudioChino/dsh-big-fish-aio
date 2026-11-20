@@ -1048,7 +1048,7 @@ const 注入上下文 = new Set(['runtime-context', 'time-context', 'system-remi
 // ⭐ 真正的外部触发（定时任务）。只有名单里的才算「不是她在说话」
 const 外部触发 = new Set(['bili-duty-scan'])
 // ⭐ 你自己的主动搭话（「可以去找她聊天了」）—— 这不是干活，判成干活就全错了
-const 自主搭话 = new Set(['speak-up'])
+const 自主搭话 = new Set(['speak-up', 'big-fish-schedule'])
 // ⭐ 2026-10-25（QQ 来的话、骰子投中的搭话，心情都不记录）：
 //   以前最后一句是 `if (src && src !== 'user') continue` —— 只要来源不是 user，
 //   全当「别的插件消息」跳过。于是 QQ 桥（source.kind='qq'）和鱼搭子挂件（'fishbuddy'）

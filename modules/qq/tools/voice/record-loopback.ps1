@@ -1,6 +1,6 @@
 ﻿# 录音回环 v4 —— 支持「固定 N 秒」和「等停止文件」两种模式；DLL 首次编译、之后秒开。
-#   powershell -File 录音回环.ps1 -秒 25 -输出 out.wav                    固定时长
-#   powershell -File 录音回环.ps1 -停 stop.txt -输出 out.wav            一直录，直到 stop.txt 存在才停
+#   powershell -File record-loopback.ps1 -秒 25 -输出 out.wav                    固定时长
+#   powershell -File record-loopback.ps1 -停 stop.txt -输出 out.wav            一直录，直到 stop.txt 存在才停
 param(
   [int]$秒 = 0,
   [string]$停 = '',

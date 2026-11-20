@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { 列会话, 拼输入 } from '../lib/生成档案.js'
+import { 列会话, 拼输入 } from '../lib/profile-generation.js'
 
 // 在临时「DSH 家目录」里造一个 sessions/<工作区>/<会话>/<文件名>
 const 造会话 = (根, 工作区, sid, 文件名) => {

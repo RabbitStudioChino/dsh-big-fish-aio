@@ -40,35 +40,71 @@ test('官方余额合并充值与赠金；失败不伪装为零，不返回认�
 
 test('三套海报使用色库绘制 PNG 画布，不包含余额或会话资料', () => {
   const texts = [], rectangles = []
-  const context = { fillRect() {}, beginPath() {}, roundRect(...args) { rectangles.push(args) }, fill() {}, fillText(value) { texts.push(value) } }
+  const draws = []
+  const context = { fillRect() {}, beginPath() {}, roundRect(...args) { rectangles.push(args) }, fill() {}, fillText(value) { texts.push(value) },
+    drawImage(artwork, x, y, width, height) { draws.push({ artwork, x, y, width, height, alpha: this.globalAlpha, labels: texts.slice() }) } }
   const sandbox = vm.createContext({ document: { createElement: () => ({ getContext: () => context }), querySelector: () => ({}) }, getComputedStyle: () => ({ getPropertyValue: () => '#112233' }) })
   vm.runInContext(source, sandbox)
   const summary = { total: 18, input: 10, output: 2, cacheRead: 5, cacheWrite: 1, ragTokens: 3, cost: 0.1 }
+  const artwork = { naturalWidth: 1254, naturalHeight: 1254 }
   for (const theme of ['ocean', 'claude', 'gpt']) for (const period of ['week', 'month', 'year']) {
-    const canvas = sandbox.ricePoster({ summary, days: [], today: '2026-11-17', period, theme, name: '测试', label: '本月' })
+    texts.length = 0
+    const canvas = sandbox.ricePoster({ summary, days: [], today: '2026-11-17', period, theme, name: '测试', label: '本月', artwork })
     assert.equal(canvas.width, 880); assert.ok(canvas.height >= 900)
+    const draw = draws.at(-1)
+    assert.equal(draw.artwork, artwork)
+    assert.ok(draw.y >= (period === 'year' ? 744 : 502), '插画不进入热点图')
+    assert.ok(Math.abs(draw.width * draw.height / (canvas.width * canvas.height) - 0.25) < 1e-10)
+    assert.equal(draw.width, draw.height)
+    assert.equal(draw.x + draw.width, canvas.width - 16)
+    assert.equal(draw.y + draw.height, canvas.height - 16)
+    assert.ok(draw.alpha < 1 && !draw.labels.includes('总 Token 数'), '插画在统计文字下方淡显')
   }
   assert.ok(texts.includes('用量报告')); assert.ok(texts.includes('总 Token 数'))
   assert.ok(!texts.some(t => /余额|会话/.test(t)))
   assert.ok(rectangles.every(([x, y, w]) => x >= 0 && y >= 0 && x + w <= 880))
 })
 
-test('分享仅提供 PNG 下载与图片剪贴板，切换样式和维度，不支持复制时保留下载', async () => {
-  let cursor = 0, copied = 0, downloaded = 0
+test('分享按样式选择背景，预览、PNG 下载和剪贴板使用同一张图', async () => {
+  let cursor = 0, effectCursor = 0, copied = 0, downloaded = 0, drawn, exported
   const posterTexts = []
-  const slots = [], ref = { current: null }
-  const canvas = { getContext: () => ({ fillRect() {}, beginPath() {}, roundRect() {}, fill() {}, fillText(t) { posterTexts.push(t) } }), toDataURL: () => 'data:image/png;base64,synthetic', toBlob: fn => fn({ type: 'image/png' }) }
+  const slots = [], effects = [], ref = { current: null }
+  const effect = (fn, deps) => {
+    const index = effectCursor++, previous = effects[index]
+    if (!previous || deps.some((value, i) => previous.deps[i] !== value)) {
+      previous?.cleanup?.()
+      effects[index] = { deps, cleanup: fn() }
+    }
+  }
+  const canvas = { getContext: () => ({ fillRect() {}, beginPath() {}, roundRect() {}, fill() {}, fillText(t) { posterTexts.push(t) }, drawImage(artwork) { drawn = artwork.src } }),
+    toDataURL: () => 'data:image/png;base64,synthetic', toBlob: fn => { exported = drawn; fn({ type: 'image/png' }) } }
+  const RICE_BACKGROUNDS = Object.fromEntries(['ocean', 'claude', 'gpt'].map(theme => [theme, Array.from({ length: 5 }, (_, i) => theme + '/' + (i + 1))]))
   const h = (type, props, ...children) => ({ type, props, children })
-  const sandbox = vm.createContext({ React: { useState(init) { const i = cursor++; if (!(i in slots)) slots[i] = init; return [slots[i], v => { slots[i] = v }] }, useRef: () => ref, useEffect: fn => fn() }, h, FishModal: 'dialog', FishInput: 'input',
+  const sandbox = vm.createContext({ React: { useState(init) { const i = cursor++; if (!(i in slots)) slots[i] = init; return [slots[i], v => { slots[i] = v }] }, useRef: () => ref, useEffect: effect, useLayoutEffect: effect }, h, FishModal: 'dialog', FishInput: 'input',
+    RICE_BACKGROUNDS, Image: class { naturalWidth = 1254; naturalHeight = 1254; async decode() {} },
     document: { createElement: tag => tag === 'canvas' ? canvas : { click() { downloaded++ } }, querySelector: () => ({}) }, getComputedStyle: () => ({ getPropertyValue: () => '#112233' }),
     navigator: { clipboard: { async write(items) { assert.equal((await items[0].data['image/png']).type, 'image/png'); copied++ } } }, ClipboardItem: class { constructor(data) { this.data = data } },
     URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} }, setTimeout: fn => fn() })
   vm.runInContext(source, sandbox)
   const flat = n => !n || typeof n !== 'object' ? [] : [n, ...n.children.flat(Infinity).flatMap(flat)]
   const props = { summary: { total: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ragTokens: 0, cost: 0 }, days: [{ date: '2026-10-31', total: 100 }, { date: '2026-11-01', total: 50 }, { date: '2026-11-16', total: 20 }, { date: '2026-11-17', total: 30 }], today: '2026-11-17', label: '当天', onClose() {} }
-  const render = () => { cursor = 0; return flat(sandbox.RiceShare(props)) }
-  render(); let nodes = render()
-  for (const title of ['Claude', 'GPT', '周', '月', '年']) {
+  const render = () => { cursor = 0; effectCursor = 0; return flat(sandbox.RiceShare(props)) }
+  const settled = async () => { render(); await Promise.resolve(); render(); return render() }
+  let nodes = await settled()
+  const backgroundButtons = () => nodes.filter(n => n.props?.className === 'rice-share-background')
+  assert.equal(backgroundButtons().length, 5)
+  assert.equal(drawn, 'ocean/1')
+  for (const title of ['Claude', 'GPT']) {
+    nodes.find(n => n.type === 'button' && n.children.includes(title)).props.onClick()
+    nodes = await settled()
+    assert.equal(drawn, title.toLowerCase() + '/1')
+    assert.equal(backgroundButtons().length, 5)
+  }
+  backgroundButtons()[4].props.onClick()
+  nodes = await settled()
+  assert.equal(backgroundButtons()[4].props['aria-pressed'], true)
+  assert.equal(drawn, 'gpt/5')
+  for (const title of ['周', '月', '年']) {
     nodes.find(n => n.type === 'button' && n.children.includes(title)).props.onClick(); posterTexts.length = 0; nodes = render()
     if (['周', '月', '年'].includes(title)) assert.ok(posterTexts.includes({ 周: '50', 月: '100', 年: '200' }[title]))
   }
@@ -78,7 +114,9 @@ test('分享仅提供 PNG 下载与图片剪贴板，切换样式和维度，不
   assert.ok(footer.children.some(n => n?.props?.className === 'fish-actions rice-share-actions'))
   assert.ok(footer.children.some(n => n?.props?.className === 'fish-muted rice-share-privacy'))
   await nodes.find(n => n.type === 'button' && n.children.includes('复制图片')).props.onClick(); assert.equal(copied, 1)
+  assert.equal(exported, 'gpt/5')
   await nodes.find(n => n.type === 'button' && n.children.includes('下载 PNG')).props.onClick(); assert.equal(downloaded, 1)
+  assert.equal(exported, 'gpt/5')
   sandbox.navigator.clipboard = undefined
   await nodes.find(n => n.type === 'button' && n.children.includes('复制图片')).props.onClick()
   assert.ok(slots.some(value => typeof value === 'string' && value.includes('不支持复制图片')))

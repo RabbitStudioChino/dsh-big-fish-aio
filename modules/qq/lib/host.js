@@ -2979,11 +2979,7 @@ export function apply(ctx) {
 
     try { stickers.sync(); await sessionTools.ensure(agent) } catch (error) { 记账('会话工具加载失败：' + String(error?.message || error)) }
 
-    // ⭐ 1.1.0：这一段聊天的人设（这一行自己写了就用它自己的，没写就用总的那份）
-    const 人设文 = 配置.人设开
-      ? String((这条 && 这条.人设) || 配置.人设 || '').trim().slice(0, 20000)
-      : ''
-    await 备人设(agent, 会话键(这间), 人设文, 配置)
+    await 备会话人设(agent, 这间, 这条, 配置)
 
     const id = 新id()
     let source = { kind: 'qq' }
@@ -3324,6 +3320,22 @@ export function apply(ctx) {
       return 'off'
     }
   }
+
+  function 备会话人设(agent, 会话, 行, 配置) {
+    const 文 = 配置.人设开 ? String(行?.人设 || 配置.人设 || '').trim().slice(0, 20000) : ''
+    return 备人设(agent, 会话键(会话), 文, 配置)
+  }
+
+  ctx.provide?.('bigFishReminderPersona', async (agent, 会话) => {
+    const 配置 = 读配置()
+    const 行 = exclusiveBinding(配置.绑定, 会话)
+    if (!行) return false
+    const 方式 = await 备会话人设(agent, 会话, 行, 配置)
+    if (方式 !== 'sys' && ((配置.人设开 && String(行.人设 || 配置.人设 || '').trim()) || (配置.特殊设定开 && 配置.特殊设定))) {
+      throw Error('定时提醒无法加载目标会话的人设')
+    }
+    return 配置.只发标记内 === true
+  })
 
   const 做闸门工具 = (agent, sid) => ({
     name: 'qq_reply_gate',
@@ -4303,8 +4315,7 @@ export function apply(ctx) {
         if (!会话) continue
         const agent = 找agent(会话)
         if (!agent) continue // 会话没起来就不管，等它起来
-        const 文 = 配置.人设开 ? String(行.人设 || 配置.人设 || '').trim().slice(0, 20000) : ''
-        await 备人设(agent, 会话键(会话), 文, 配置)
+        await 备会话人设(agent, 会话, 行, 配置)
       }
       if (!人设心跳说过) {
         人设心跳说过 = true

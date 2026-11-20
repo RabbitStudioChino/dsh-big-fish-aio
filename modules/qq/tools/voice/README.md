@@ -8,18 +8,18 @@
 
 | 文件 | 干什么 |
 |---|---|
-| `录语音.mjs` | **看门狗**。盯着朗读桥，念的时候调录音脚本，录到分段就发 QQ |
-| `录音回环.ps1` | 真正干活的录音器（录「系统声音回环」，不需要麦克风） |
-| `朗读信号哨兵/` | 一个 Chrome 扩展：它盯朗读桥面板上的「🔊 点朗读」那行字，一出现就通知看门狗开录 |
+| `record-voice.mjs` | **看门狗**。盯着朗读桥，念的时候调录音脚本，录到分段就发 QQ |
+| `record-loopback.ps1` | 真正干活的录音器（录「系统声音回环」，不需要麦克风） |
+| `read-aloud-sentinel/` | 一个 Chrome 扩展：它盯朗读桥面板上的「🔊 点朗读」那行字，一出现就通知看门狗开录 |
 
 数据流：
 
 ```
 AI 在朗读桥里开始念
         ↓（面板出现「🔊 点朗读」）
-朗读信号哨兵（Chrome 扩展）── POST /start ──▶ 录语音.mjs
+朗读信号哨兵（Chrome 扩展）── POST /start ──▶ record-voice.mjs
                                                 ↓
-                                     录音回环.ps1 边录边切段
+                                     record-loopback.ps1 边录边切段
                                                 ↓
                                      发到 QQ（OneBot 的 record 消息）
 ```
@@ -31,7 +31,7 @@ AI 在朗读桥里开始念
 | **1 = 切断发** | 边录边发：念一段发一段，QQ 上会连着几条 | 想快点听到、不在乎多条 |
 | **2 = 完整发** | 整段念完，把分段**拼成一条** wav 再发 | 想要一条干净的语音 |
 
-双击 `启动-录语音.bat`，它会问你：
+双击 `start-voice-recording.bat`，它会问你：
 
 ```
 1 = 切断发 —— 边录边发
@@ -42,8 +42,8 @@ AI 在朗读桥里开始念
 也可以命令行直接指定：
 
 ```bat
-node 录语音.mjs 1     :: 切断发
-node 录语音.mjs 2     :: 完整发
+node record-voice.mjs 1     :: 切断发
+node record-voice.mjs 2     :: 完整发
 ```
 
 ## 三、装之前要准备什么
@@ -51,16 +51,16 @@ node 录语音.mjs 2     :: 完整发
 1. **朗读桥（tts-bridge）**：AI 得能"念"出来。装 `dsh-tts-bridge` 并配好声音
 2. **QQ 后端**：主插件用的那个（SnowLuma / NapCat），要开着 HTTP 接口（默认 `127.0.0.1:3000`）
 3. **Node.js**：能跑 `.mjs` 就行（DSH 自带的那个也可以）
-4. **Windows**：`录音回环.ps1` 用的是 WASAPI 系统声音回环，只支持 Windows
+4. **Windows**：`record-loopback.ps1` 用的是 WASAPI 系统声音回环，只支持 Windows
 
 ## 四、装
 
 ### 1) 录语音看门狗
 
-把整个 `tools\语音\` 目录放到任意地方（比如 `桌面\语音\`），然后：
+把整个 `tools\voice\` 目录放到任意地方（比如 `桌面\voice\`），然后：
 
 ```bat
-启动-录语音.bat
+start-voice-recording.bat
 ```
 
 它会问你模式和 QQ 号。**第一次建议先不填 QQ 号**——那样只录音、不发送，确认能录到声音再填。
@@ -71,7 +71,7 @@ node 录语音.mjs 2     :: 完整发
 
 1. 打开 Chrome → `chrome://extensions`
 2. 右上角打开「开发者模式」
-3. 点「加载已解压的扩展程序」→ 选 `朗读信号哨兵` 这个文件夹
+3. 点「加载已解压的扩展程序」→ 选 `read-aloud-sentinel` 这个文件夹
 
 它会匹配 `http://127.0.0.1/*`（不限端口，DSH 每次换端口也没事）和 `chat.deepseek.com`。
 
@@ -83,7 +83,7 @@ node 录语音.mjs 2     :: 完整发
 
 ```bat
 set DSH_PORTS=12345
-node 录语音.mjs 1
+node record-voice.mjs 1
 ```
 
 ## 五、可调的环境变量
@@ -96,13 +96,13 @@ node 录语音.mjs 1
 | `VOICE_SEG_SECONDS` | `10` | 每段目标长度（秒），停顿处会提前切 |
 | `VOICE_WATCHDOG_PORT` | `8765` | 看门狗听哨兵的端口 |
 | `DSH_PORTS` | `19387,39871,39872` | 找朗读桥时挨个试的端口 |
-| `RECORDER_PS1` | 同目录的 `录音回环.ps1` | 录音脚本路径 |
+| `RECORDER_PS1` | 同目录的 `record-loopback.ps1` | 录音脚本路径 |
 
 ## 六、已知限制
 
 - **只支持 Windows**（WASAPI 回环）
 - 录音是**系统声音回环**：电脑在放别的声（音乐、视频）也会被录进去
-- 一次念超过 5 分钟会被强制停（`录语音.mjs` 里的保护）
+- 一次念超过 5 分钟会被强制停（`record-voice.mjs` 里的保护）
 - 完整发（模式 2）是把同一轮的分段**按 PCM 直接拼**的：如果录音中途格式变了会拼歪（正常不会）
 - 语音走的是 OneBot 的 `record` 消息，**QQ 后端必须支持发语音**（SnowLuma / NapCat 都支持）
 

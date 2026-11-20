@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "v1.2.0",
+  "version": "1.2.0",
+  "channel": "stable",
+  "title": "大肥鱼 1.2.0",
+  "publishedAt": "2026-11-20T09:02:41.498Z",
+  "sections": [
+    {
+      "id": "schedule",
+      "title": "定时任务",
+      "items": [
+        {
+          "id": "schedule.create",
+          "title": "新增会话提醒",
+          "description": "在「主动搭话」下方的「定时任务」选择 QQ 互通绑定工作区中的会话，按北京时间设置仅一次、每天、每周指定一天、每周末、法定工作日或法定节假日。内置 2026、2027 年日历，包含调休补班。"
+        },
+        {
+          "id": "schedule.persona",
+          "title": "按目标会话的人设发送提醒",
+          "description": "任务保存在本机，到点后使用目标会话的人设、称呼和口吻转述。已绑定 QQ 的会话沿用其自动转发设置。触发时需要 DSH 运行，目标会话正忙或未打开时最多等待 15 分钟。"
+        },
+        {
+          "id": "schedule.manage",
+          "title": "支持停用、重新开启和删除",
+          "description": "任务列表显示下次触发时间及执行状态。重复任务重新开启后，从下一次计划时间继续。"
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "title": "开放平台",
+      "items": [
+        {
+          "id": "platform.schedule",
+          "title": "QQ 主人可通过聊天管理定时提醒",
+          "description": "启用「定时任务」接入并授权调用会话和目标会话后，可在聊天中查询、创建、停用和删除任务。「定时任务」页可直接跳转并高亮对应接入卡片。"
+        }
+      ]
+    },
+    {
+      "id": "rice",
+      "title": "吃大米饭与用量报告",
+      "items": [
+        {
+          "id": "rice.report_artwork",
+          "title": "报告新增 15 张可选插画",
+          "description": "大肥鱼、Claude、GPT 三种主题各有 5 张，选中的插画以淡色呈现在整张海报右下角，预览、下载 PNG 和复制图片均使用同一张海报。"
+        }
+      ]
+    },
+    {
+      "id": "updates",
+      "title": "更新与兼容性",
+      "items": [
+        {
+          "id": "updates.fixes",
+          "title": "修复了一些已知问题。"
+        }
+      ]
+    }
+  ]
+}

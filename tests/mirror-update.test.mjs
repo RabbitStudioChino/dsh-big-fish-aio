@@ -12,24 +12,26 @@ test('国内检查与安装全程使用镜像，校验安装包并清理临时�
   try {
     const root = join(home, 'node_modules', 'dsh-big-fish-aio'); mkdirSync(root, { recursive: true })
     writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'dsh-big-fish-aio', version: '0.0.1' }))
-    const bytes = Buffer.from('模拟完整安装包')
-    const integrity = 'sha512-' + createHash('sha512').update(bytes).digest('base64')
+    const bytes = Buffer.alloc(33 * 1024 * 1024, 0x61)
+    const digest = data => 'sha512-' + createHash('sha512').update(data).digest('base64')
+    const integrity = digest(bytes)
     let remote = { name: 'dsh-big-fish-aio', version: '0.0.2', dist: { integrity, tarball: 'https://other.invalid/package.tgz' } }
-    let corrupt = false, oversized = false, missing = false
+    let corrupt = false, missing = false
     const requests = [], installed = []
     globalThis.fetch = async url => {
       requests.push(url)
       assert.ok(String(url).startsWith('https://registry.npmmirror.com/'))
       if (String(url).endsWith('/latest')) return missing ? new Response('', { status: 404 }) : Response.json(remote)
       assert.equal(url, `https://registry.npmmirror.com/dsh-big-fish-aio/-/dsh-big-fish-aio-${remote.version}.tgz`)
-      return new Response(corrupt ? Buffer.from('损坏文件') : bytes, { headers: oversized ? { 'content-length': String(33 * 1024 * 1024) } : {} })
+      const body = corrupt ? Buffer.from('损坏文件') : bytes
+      return new Response(body, { headers: { 'content-length': String(body.length) } })
     }
     const updater = createSelfUpdate({ packageRoot: root })
     assert.equal((await updater.check(true)).hasUpdate, true)
     assert.equal((await updater.check(false)).cached, true)
     assert.equal(requests.length, 1)
     const ctx = { pluginManager: { installBundle: async (path, options) => {
-      assert.deepEqual(readFileSync(path), bytes)
+      assert.equal(digest(readFileSync(path)), integrity)
       assert.equal(options.registry, 'https://registry.npmmirror.com')
       installed.push(path)
       return { application: 'restart-required', changed: true }
@@ -42,11 +44,10 @@ test('国内检查与安装全程使用镜像，校验安装包并清理临时�
     assert.match((await updater.install(ctx)).error, /没有可安装的新版本/)
     remote = { ...remote, version: '0.0.3' }
     corrupt = true
-    assert.match((await updater.install(ctx)).error, /完整性校验失败/)
-    corrupt = false; oversized = true
-    assert.match((await updater.install(ctx)).error, /32 MB/)
+    const rejected = await updater.install(ctx)
+    assert.match(rejected.error, /完整性校验失败/)
+    assert.equal(existsSync(rejected.spec), false)
     assert.equal(installed.length, 1)
-    oversized = false
     remote = { ...remote, name: 'other-package' }
     assert.match((await updater.check(true)).error, /包名/)
     remote = { ...remote, name: 'dsh-big-fish-aio', version: 'broken-version' }

@@ -49,6 +49,16 @@ test('检查拒绝被强制跟踪的私有文件，打包也拒绝绕过忽略�
   assert.match(run().stderr, /Package contains an ignored or unreviewed file/)
 })
 
+test('安装包拒绝会被 DSHM 解包损坏的非 ASCII 路径', t => {
+  const root = fixture(t)
+  const meta = { name: 'synthetic-public-fixture', version: '1.0.0', files: ['index.js', '中文.txt'] }
+  writeFileSync(join(root, 'package.json'), JSON.stringify(meta))
+  writeFileSync(join(root, '中文.txt'), 'Synthetic dictionary\n')
+  const result = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Package paths must use printable ASCII/)
+})
+
 test('正式源码拒绝旧内测日志，私有内测保留自己的日志', t => {
   const root = fixture(t)
   const run = () => spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' })

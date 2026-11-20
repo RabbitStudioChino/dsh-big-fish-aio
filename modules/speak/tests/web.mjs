@@ -13,7 +13,7 @@ globalThis.useFishAutosave = save => ({ onBlurCapture: save, onChangeCapture: sa
 //   5) 没有会话 / 没有日志 / 旧数据形状时不崩。
 // ⚠ 它验不了真实浏览器里的样子（样式、fetch 往返）。
 //
-// 跑法： node tests/网页半边.mjs
+// 跑法： node tests/web.mjs
 
 let 捕获 = null
 globalThis.window = { __ModuleLoader__: { load: (o) => { 捕获 = o } } }

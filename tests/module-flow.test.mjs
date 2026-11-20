@@ -7,12 +7,18 @@ import { Readable } from 'node:stream'
 import vm from 'node:vm'
 import { recordSource } from '../modules/qq/lib/memory-sources.mjs'
 
-test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 → QQ 出站，以及挂饰和统一更新', async () => {
+test('整合联调：搭话、记忆、心情、定时提醒与 QQ 出站', async t => {
   const home = mkdtempSync(join(tmpdir(), 'fish-aio-flow-'))
   const previous = process.env.DSH_HOME, originalFetch = globalThis.fetch
   const cleanups = [], outbound = [], modelCalls = [], events = [], contexts = new Map(), tools = new Map()
-  const routes = new Map(), hostEvents = new Map(), agentEvents = new Map()
+  const routes = new Map(), hostEvents = new Map(), agentEvents = new Map(), timers = []
   let onSend = () => {}
+  const personaSections = new Map()
+  const systemPrompt = {
+    section(section) { personaSections.set(section.name, section); return () => personaSections.delete(section.name) },
+    assemble: () => ({ sections: [...personaSections.values()] }),
+  }
+  let reminderPersona = ''
   const sid = 'session-aio-flow'
   const write = (path, data) => writeFileSync(join(home, path), JSON.stringify(data))
   const listen = (map, name, fn) => {
@@ -27,7 +33,7 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
     write('feiyu-mood/config.json', { slots: [{ id: 'partner', sessions: [sid] }], autoJudge: true })
     write('fish-memory-config.json', { 全局开关: true, sessions: { [sid]: true }, policy: { autoExpand: false, queryGate: 0 } })
     write('speak-up-config.json', { 目标会话: [sid], 试运行: true, 安静起: 0, 安静止: 0, 触发文案: '想起你喜欢的茉莉花茶，来找你聊聊。' })
-    const qqConfig = { 工作区: 'fish', 总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:39991', 只回QQ唤醒: true, 自动触发也发: true, 按段发送: false, 绑定: [{ 类型: '私聊', 号码: '123456', 会话: sid }] }
+    const qqConfig = { 工作区: 'fish', 总开关: true, 试运行: false, NapCat: 'http://127.0.0.1:39991', 只回QQ唤醒: true, 自动触发也发: true, 按段发送: false, 绑定: [{ 类型: '私聊', 号码: '123456', 会话: sid, 主人QQ: true }] }
     write('qq-bridge-config.json', qqConfig)
     recordSource(home, qqConfig, '998877', qqConfig.绑定[0], 'verified-input', ['123456'])
     events.push({ type: 'user/message', data: { id: 'verified-input', role: 'user', content: [{ type: 'text', text: '我一直喜欢茉莉花茶' }], source: { kind: 'qq' } } })
@@ -41,11 +47,13 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
       id: sid, status: 'idle', options: { provider: 'test', model: 'synthetic' },
       session: { id: sid, snapshotEvents: () => events },
       ctx: {
+        get: key => key === 'systemPrompt' ? systemPrompt : undefined,
         on: (name, fn) => listen(agentEvents, name, fn),
         tools: { register: tool => { tools.set(tool.name, tool); return () => tools.delete(tool.name) } },
         systemPrompt: { context: item => { contexts.set(item.name, item); return () => contexts.delete(item.name) } },
       },
       async followup(message) {
+        if (message.source.kind === 'big-fish-schedule') reminderPersona = [...personaSections.values()].map(section => section.text).join('\n')
         events.push({ type: 'user/message', data: message })
         await emit(agentEvents, 'agent/inbox/inserted', { message })
         await emit(hostEvents, 'session/event', this.session, events.at(-1))
@@ -55,7 +63,7 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
       plugin: plugin => plugin.apply(ctx),
       agents: { list: () => [agent], roots: () => [agent], get: id => id === sid ? agent : undefined },
       sessions: { list: () => [agent.session], get: () => agent.session, flush: async () => {} },
-      workspaceRegistry: { archivedSessionIds: [], list: () => [{ id: 'fish', path: home }], get: () => ({ id: 'fish', path: home, sessionIds: [sid] }) },
+      workspaceRegistry: { archivedSessionIds: [], list: () => [{ id: 'fish', path: home }], get: () => ({ id: 'fish', path: home, sessionIds: [sid, 'session-other'] }) },
       llm: { async *stream(input) { modelCalls.push(input); yield { type: 'text-delta', text: JSON.stringify({ moodDelta: 9, dims: { happy: 6 }, reason: '想起你喜欢的茉莉花茶，很开心', confidence: 95 }) } } },
       tools: agent.ctx.tools,
       webServer: { register: route => { assert.ok(!routes.has(route.path), '路由不冲突：' + route.path); routes.set(route.path, route.handler); return () => routes.delete(route.path) } },
@@ -63,7 +71,7 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
       inject(services, callback) {
         if (services.every(name => this[name])) callback(this)
       },
-      interval: () => () => {},
+      interval: fn => { timers.push(fn); return () => {} },
       on: (name, fn) => listen(hostEvents, name, fn),
       effect: fn => { const off = fn(); if (typeof off === 'function') cleanups.push(off) },
       logger: { info() {}, warn() {} },
@@ -71,7 +79,7 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
     }
     const host = await import('../index.js')
     host.apply(ctx)
-    assert.deepEqual(ctx.bigFishOpenPlatform.list().providers.map(provider => provider.id), ['dsh_account', 'skills', 'rice'])
+    assert.deepEqual(ctx.bigFishOpenPlatform.list().providers.map(provider => provider.id), ['dsh_account', 'skills', 'rice', 'schedule'])
     assert.equal(ctx.bigFishOpenPlatform.list().providers[1].enabled, false)
     async function call(path, body) {
       const req = Readable.from(body ? [JSON.stringify(body)] : [])
@@ -145,6 +153,55 @@ test('四模块联调：搭话 → 记忆上下文 → 心情判断与注入 →
     await emit(hostEvents, 'session/event', agent.session, { type: 'turn/end', data: { turn: 6, reason: { kind: 'completed' } } })
     await flush()
     assert.equal(outbound.length, afterSplit, '试运行开启后拦截自动搭话的等待中回复')
+    const schedulePath = '/dsh-big-fish-aio/open-platform/scheduled-messages'
+    const reminderAt = Date.now() + 60_000
+    const reminder = { at: new Date(reminderAt).toISOString(), repeat: 'once', message: '记得带雨伞' }
+    assert.equal(tools.has('big_fish_schedule_create'), false)
+    const pageTask = (await call(schedulePath + '/create', { ...reminder, message: '页面提醒', sessionId: sid })).json().task
+    const otherTask = (await call(schedulePath + '/create', { ...reminder, message: '另一个会话的提醒', sessionId: 'session-other' })).json().task
+    ctx.bigFishOpenPlatform.connect({ providerId: 'schedule', enabled: true, sessionIds: [sid] })
+    const create = tools.get('big_fish_schedule_create').execute
+    const disable = tools.get('big_fish_schedule_disable').execute
+    const remove = tools.get('big_fish_schedule_remove').execute
+    const list = tools.get('big_fish_schedule_list_sessions').execute
+    assert.equal((await create(reminder, { agent })).ok, false, '自动搭话不能自行注册定时任务')
+    assert.equal((await remove({ id: pageTask.id }, { agent })).ok, false, '自动搭话无权删除任务')
+    assert.equal((await disable({ id: pageTask.id }, { agent })).ok, false, '自动搭话无权停用任务')
+    assert.equal((await list({ includeTasks: true }, { agent })).ok, false, '自动搭话无权查看任务')
+    events.push({ type: 'user/message', data: { id: 'verified-input', source: { kind: 'qq' } } })
+    assert.equal((await list({}, { agent })).data.tasks, undefined)
+    assert.deepEqual((await list({ includeTasks: true }, { agent })).data.tasks.map(task => task.id), [pageTask.id])
+    assert.equal((await disable({ id: otherTask.id }, { agent })).ok, false, '禁止停用未授权目标的任务')
+    assert.equal((await remove({ id: otherTask.id }, { agent })).ok, false, '禁止删除未授权目标的任务')
+    assert.deepEqual((await disable({ id: pageTask.id }, { agent })).data, { id: pageTask.id, enabled: false })
+    assert.equal((await call(schedulePath + '/enabled', { id: pageTask.id, enabled: true })).json().task.enabled, true)
+    assert.deepEqual((await remove({ id: pageTask.id }, { agent })).data, { id: pageTask.id })
+    await call(schedulePath + '/remove', { id: otherTask.id })
+    assert.equal((await create({ ...reminder, sessionId: 'not-granted' }, { agent })).ok, false)
+    const created = await create({ ...reminder, message: '记得带雨伞，用大肥鱼的口吻说一句，别太啰嗦。' }, { agent })
+    assert.equal(created.ok, true, JSON.stringify(created))
+    const storedReminder = (await call(schedulePath)).json().tasks[0]
+    assert.equal(storedReminder.id, created.data.id)
+    assert.equal(storedReminder.message, reminder.message)
+    ctx.bigFishOpenPlatform.connect({ providerId: 'schedule', enabled: false, sessionIds: [sid] })
+    assert.equal((await create(reminder, { agent })).ok, false, '关闭接入后旧工具句柄也不能创建')
+    assert.equal((await disable({ id: created.data.id }, { agent })).ok, false)
+    write('qq-bridge-config.json', { ...qqConfig, 人设开: true, 人设: '全局称呼小伙伴', 只发标记内: true, 绑定: [{ ...qqConfig.绑定[0], 人设: '这个会话叫对方小船长' }] })
+    const nowMock = t.mock.method(Date, 'now', () => reminderAt)
+    try { timers[0](); await flush() }
+    finally { nowMock.mock.restore() }
+    assert.equal(events.at(-1).data.source.kind, 'big-fish-schedule')
+    assert.match(events.at(-1).data.content[0].text, /记得带雨伞/)
+    assert.match(events.at(-1).data.content[0].text, /会话的人设、称呼和口吻/)
+    assert.match(events.at(-1).data.content[0].text, /\[QQ\]/)
+    assert.doesNotMatch(events.at(-1).data.content[0].text, /小船长/)
+    assert.match(reminderPersona, /这个会话叫对方小船长/)
+    assert.doesNotMatch(reminderPersona, /全局称呼小伙伴/)
+    assert.equal((await call(schedulePath)).json().tasks[0].status, 'triggered')
+    await emit(hostEvents, 'session/event', agent.session, { type: 'assistant/message', data: { turn: 7, message: { role: 'assistant', content: [{ type: 'text', text: '[QQ]小船长，记得带雨伞哦！[/QQ]' }] } } })
+    await emit(hostEvents, 'session/event', agent.session, { type: 'turn/end', data: { turn: 7, reason: { kind: 'completed' } } })
+    await flush()
+    assert.ok(outbound.some(r => r.url.endsWith('/send_private_msg') && JSON.stringify(r.body).includes('小船长，记得带雨伞哦')), '人设化提醒沿用 QQ 标记转发')
     const table = []
     await emit(hostEvents, 'webserver/index-inject', table)
     await emit(hostEvents, 'webserver/index-inject', table)

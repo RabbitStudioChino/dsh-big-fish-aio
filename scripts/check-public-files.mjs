@@ -26,6 +26,8 @@ const [pack] = JSON.parse(execSync('npm pack --dry-run --ignore-scripts --json',
 }))
 const paths = pack.files.map(file => file.path)
 assertFormalFiles(meta.version, paths)
+// DSHM's PAX parser can corrupt UTF-8 paths when unpacking npm tarballs.
+assert.deepEqual(paths.filter(path => /[^\x20-\x7e]/u.test(path)), [], 'Package paths must use printable ASCII')
 const publicFiles = new Set(files)
 assert.deepEqual(paths.filter(path => !publicFiles.has(path)), [], 'Package contains an ignored or unreviewed file')
 assert.deepEqual(ignored(paths), [], 'Package contains private files')

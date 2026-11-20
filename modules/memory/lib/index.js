@@ -36,7 +36,7 @@ const createUserMessage = hostDeps.createUserMessage
 try { for (const n of (hostDeps.notes || [])) diag('hostdeps: ' + n) } catch (e) {}
 // ⭐ 2026-09-22（她的第十件）：「从会话生成档案」那一块单独放一个文件 ——
 //   整料 / 切批 / 拼提示词 / 出档案 都在里面，能单独测，不用全塞进这个 4300 行的文件
-import * as 生成档案 from './生成档案.js'
+import * as 生成档案 from './profile-generation.js'
 
 export const name = 'memory'
 export const inject = ['systemPrompt', 'agents', 'timer', 'tools', 'webServer', 'sessions', 'sessionTitle', 'llm']
@@ -2292,7 +2292,7 @@ const 机器来源 = new Set([
   'compact-checkpoint', 'repeat-tool-reminder', 'user-approval',
   'system-prompt', 'working-directory', 'ptc-mode', 'tool-registry',
   'agent-instructions', 'subagent-settled', 'team-message', 'agent-message',
-  'speak-up', 'her-words', 'bili-duty-scan', 'fishbuddy-watch',
+  'speak-up', 'big-fish-schedule', 'her-words', 'bili-duty-scan', 'fishbuddy-watch',
 ])
 
 function 来源种类(e) {
@@ -2420,7 +2420,7 @@ function 中文片段(s) {
   return out
 }
 
-// ⭐⭐ 2026-09-23：**通用中文词表**（jieba 的，MIT，见同目录 词典-来源.txt）
+// ⭐⭐ 2026-09-23：**通用中文词表**（jieba 的，MIT，见同目录 dictionary-source.txt）
 //
 // 老切法（停用词切开 + 长串只出 2-gram）有个治不好的毛病：
 //     记忆里「车站附近」 → 切出 车站 / 站附 / 附近，**「车」自己不是一项**
@@ -2434,7 +2434,7 @@ function 中文片段(s) {
 // ⚠ 词表是**通用中文**的，跟谁用、说过什么话**无关** —— 装上第一天就管用，
 //   不需要先喂够语料（这是给别人用的前提）。
 // ⚠ 读不到这个词表文件时**自动退回老切法**，不会崩 ✓
-const 词表路径 = join(dirname(fileURLToPath(import.meta.url)), '词典.txt')
+const 词表路径 = join(dirname(fileURLToPath(import.meta.url)), 'dictionary.txt')
 let 词表 = null // Set<string>；null = 还没装，空 Set = 文件读不到
 let 词表最长 = 8 // 最长匹配的窗口上限
 
@@ -2457,7 +2457,7 @@ function 装词表() {
   return 词表
 }
 
-// ⭐⭐ 2026-09-24：**通用中文词频表**（jieba 的，MIT，跟 词典.txt 同一个来源）✓
+// ⭐⭐ 2026-09-24：**通用中文词频表**（jieba 的，MIT，跟 dictionary.txt 同一个来源）✓
 //
 //   治的是什么：**「库里稀不稀有」在小库上没有意义**。
 //   实测她那句「轮到**正式**演出…我也该**表示**了」，注入的却是
@@ -2472,7 +2472,7 @@ function 装词表() {
 //   → 再拿一把**跟谁用无关**的尺子：这个词在通用中文里有多常见。
 //     最常见的那些词（谁的话里都会出现）不当检索线索 ✓
 //   ⚠ 读不到这个文件就**当没有**（不压），不会崩；老行为完全不变 ✓
-const 词频路径 = join(dirname(fileURLToPath(import.meta.url)), '词频.txt')
+const 词频路径 = join(dirname(fileURLToPath(import.meta.url)), 'word-frequencies.txt')
 let 词频表 = null // Map<string, number>：词 → 0~99（0 最常用，99 最具体）
 
 function 装词频() {
